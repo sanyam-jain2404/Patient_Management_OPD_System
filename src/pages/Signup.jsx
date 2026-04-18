@@ -5,7 +5,7 @@ import { useToast } from "../components/Toast";
 export default function Signup() {
   const navigate = useNavigate();
   const toast    = useToast();
-  const [form, setForm]       = useState({ name: "", email: "", password: "", role: "Doctor" });
+  const [form, setForm]       = useState({ name: "", email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
 
@@ -53,7 +53,7 @@ export default function Signup() {
 
         {/* Feature list */}
         <div className="relative z-10 space-y-3">
-          {["Real-time patient tracking", "Smart discharge management", "Analytics & reporting", "Role-based access control"].map(f => (
+          {["Real-time patient tracking", "Smart discharge management", "Prescription & vitals recording", "Daily OPD analytics"].map(f => (
             <div key={f} className="flex items-center gap-3">
               <div className="w-5 h-5 rounded-full bg-indigo-500/30 border border-indigo-500/50 flex items-center justify-center text-xs text-indigo-300">✓</div>
               <span className="text-slate-300 text-sm">{f}</span>
@@ -83,19 +83,6 @@ export default function Signup() {
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Role</label>
-              <select
-                name="role"
-                onChange={handleChange}
-                className="w-full bg-slate-800/60 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
-              >
-                <option>Doctor</option>
-                <option>Nurse</option>
-                <option>Admin</option>
-                <option>Receptionist</option>
-              </select>
-            </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Email</label>
