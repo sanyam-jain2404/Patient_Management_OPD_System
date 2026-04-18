@@ -4,8 +4,8 @@ import { useToast } from "../components/Toast";
 
 export default function Login() {
   const navigate = useNavigate();
-  const toast    = useToast();
-  const [form, setForm]       = useState({ email: "", password: "" });
+  const toast = useToast();
+  const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
 
@@ -16,8 +16,6 @@ export default function Login() {
     setLoading(true);
     await new Promise(r => setTimeout(r, 700)); // simulated delay
     const user = JSON.parse(localStorage.getItem("user"));
-    console.log(user.email);
-    console.log(user.password);
     if (user && user.email === form.email && user.password === form.password) {
       localStorage.setItem("auth", "true");
       window.dispatchEvent(new Event("storage"));
@@ -125,8 +123,8 @@ export default function Login() {
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                   </svg>
                   Signing in...
                 </span>

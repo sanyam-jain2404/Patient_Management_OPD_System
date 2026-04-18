@@ -1,157 +1,181 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { useToast } from "../components/Toast";
 
-function exportCSV(data) {
-  if (data.length === 0) return;
-  const headers = ["Name", "Age", "Disease", "Doctor", "Admitted", "Discharged", "Status", "Notes"];
-  const rows = data.map(p => [
-    p.name, p.age, p.disease, p.doctor,
-    p.date || "", p.dischargeDate || "",
-    p.status || "Discharged",
-    (p.dischargeNotes || "").replace(/,/g, ";"),
-  ]);
-  const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.download = `discharged-patients-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+const DEFAULT_SETTINGS = {
+  hospitalName: "City OPD Clinic",
+  doctorName:   "Dr. Sharma",
+  city:         "New Delhi",
+  phone:        "",
+  capacity:     50,
+  doctors: [
+    "General Physician",
+    "Cardiologist",
+    "Dermatologist",
+    "Orthopedic",
+    "Neurologist",
+    "Pediatrician",
+    "ENT Specialist",
+  ],
+};
+
+function loadSettings() {
+  try {
+    return JSON.parse(localStorage.getItem("opdSettings")) || DEFAULT_SETTINGS;
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
 }
 
-export default function Reports() {
-  const [data,   setData]   = useState([]);
-  const [search, setSearch] = useState("");
+export default function Settings() {
+  const toast = useToast();
+  const [settings,   setSettings]   = useState(loadSettings);
+  const [newDoctor,  setNewDoctor]   = useState("");
+  const [saved,      setSaved]       = useState(false);
 
-  const load = () => {
-    const d = JSON.parse(localStorage.getItem("discharged")) || [];
-    setData([...d].reverse());
+  const handleChange = (key, value) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
+    setSaved(false);
   };
 
-  useEffect(() => {
-    load();
-    window.addEventListener("storage", load);
-    return () => window.removeEventListener("storage", load);
-  }, []);
+  const handleSave = () => {
+    localStorage.setItem("opdSettings", JSON.stringify(settings));
+    window.dispatchEvent(new Event("storage"));
+    setSaved(true);
+    toast("Settings saved successfully!", "success");
+  };
 
-  const filtered = data.filter(p =>
-    p.name?.toLowerCase().includes(search.toLowerCase()) ||
-    p.disease?.toLowerCase().includes(search.toLowerCase()) ||
-    p.doctor?.toLowerCase().includes(search.toLowerCase())
-  );
+  const addDoctor = () => {
+    const name = newDoctor.trim();
+    if (!name) return;
+    if (settings.doctors.includes(name)) {
+      toast("Doctor already exists.", "error");
+      return;
+    }
+    setSettings(prev => ({ ...prev, doctors: [...prev.doctors, name] }));
+    setNewDoctor("");
+    setSaved(false);
+  };
+
+  const removeDoctor = (name) => {
+    setSettings(prev => ({ ...prev, doctors: prev.doctors.filter(d => d !== name) }));
+    setSaved(false);
+  };
+
+  const resetDefaults = () => {
+    setSettings(DEFAULT_SETTINGS);
+    setSaved(false);
+    toast("Reset to default settings.", "info");
+  };
+
+  const inputCls = "w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all";
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="max-w-2xl mx-auto animate-fade-in space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Discharged Patients</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{filtered.length} record{filtered.length !== 1 ? "s" : ""} found</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">⚙️ Settings</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Configure your OPD system preferences</p>
         </div>
         <button
-          onClick={() => exportCSV(filtered)}
-          disabled={filtered.length === 0}
-          className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow transition-all hover:shadow-emerald-500/30 hover:scale-105 active:scale-95"
+          onClick={resetDefaults}
+          className="text-xs font-semibold text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 transition-colors"
         >
-          📥 Export CSV
+          ↩ Reset Defaults
         </button>
       </div>
 
-      {/* Summary stats */}
-      {data.length > 0 && (
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: "Total Discharged", value: data.length, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/20" },
-            { label: "This Month",       value: data.filter(p => p.dischargeDate?.startsWith(new Date().toISOString().slice(0,7))).length, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/20" },
-            { label: "Recovery Rate",    value: "100%",      color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-900/20" },
-          ].map(s => (
-            <div key={s.label} className={`${s.bg} rounded-2xl p-4 border border-slate-200 dark:border-slate-800`}>
-              <p className={`text-2xl font-extrabold ${s.color}`}>{s.value}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">{s.label}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Search */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, disease, or doctor..."
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-          />
+      {/* Hospital Info */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+        <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
+          <span className="w-1.5 h-4 bg-indigo-500 rounded-full inline-block" /> Hospital / Clinic Info
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Clinic / Hospital Name</label>
+            <input value={settings.hospitalName} onChange={e => handleChange("hospitalName", e.target.value)} placeholder="e.g. City OPD Clinic" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Senior Doctor / In-charge</label>
+            <input value={settings.doctorName} onChange={e => handleChange("doctorName", e.target.value)} placeholder="e.g. Dr. Sharma" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">City</label>
+            <input value={settings.city} onChange={e => handleChange("city", e.target.value)} placeholder="e.g. New Delhi" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Contact Number</label>
+            <input value={settings.phone} onChange={e => handleChange("phone", e.target.value)} placeholder="e.g. +91 98765 43210" className={inputCls} />
+          </div>
         </div>
       </div>
 
-      {/* Table / Empty state */}
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <span className="text-5xl">🚪</span>
-          <p className="font-semibold">{data.length === 0 ? "No discharges yet" : "No matches found"}</p>
-          <p className="text-sm">{data.length === 0 ? "Discharged patients will appear here." : "Try a different search term."}</p>
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
-          {/* Desktop */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-800/60">
-                <tr>
-                  {["Patient", "Disease", "Doctor", "Admitted", "Discharged", "Status"].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filtered.map((p, i) => {
-                  const initials = p.name?.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-                  return (
-                    <tr key={p.id + (p.dischargeDate || i)} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors animate-fade-in" style={{ animationDelay: `${i * 40}ms` }}>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 text-white text-sm font-bold flex items-center justify-center shrink-0">{initials}</div>
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800 dark:text-white">{p.name}</p>
-                            <p className="text-xs text-slate-400">{p.blood || "—"} · Age {p.age}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{p.disease}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{p.doctor}</td>
-                      <td className="px-4 py-3 text-sm text-slate-400">{p.date || "—"}</td>
-                      <td className="px-4 py-3 text-sm text-slate-400">{p.dischargeDate || "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-2.5 py-1 rounded-full">
-                          ✓ {p.status || "Discharged"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* OPD Config */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+        <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
+          <span className="w-1.5 h-4 bg-violet-500 rounded-full inline-block" /> OPD Configuration
+        </h2>
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Daily Patient Capacity</label>
+          <div className="flex items-center gap-4">
+            <input
+              type="range" min={10} max={200} step={5}
+              value={settings.capacity}
+              onChange={e => handleChange("capacity", Number(e.target.value))}
+              className="flex-1 accent-indigo-600"
+            />
+            <span className="text-lg font-extrabold text-indigo-600 dark:text-indigo-400 w-12 text-center">{settings.capacity}</span>
           </div>
+          <p className="text-xs text-slate-400 mt-1">Maximum patients per day before OPD shows as full (used in Dashboard capacity card)</p>
+        </div>
+      </div>
 
-          {/* Mobile cards */}
-          <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
-            {filtered.map((p, i) => (
-              <div key={p.id + i} className="p-4 flex items-center gap-3 animate-fade-in" style={{ animationDelay: `${i * 40}ms` }}>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 text-white font-bold flex items-center justify-center shrink-0">
-                  {p.name?.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-800 dark:text-white truncate">{p.name}</p>
-                  <p className="text-xs text-slate-400">{p.disease} · {p.dischargeDate || ""}</p>
-                </div>
-                <span className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-2.5 py-1 rounded-full font-semibold">✓ Done</span>
-              </div>
-            ))}
-          </div>
+      {/* Doctors List */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+        <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
+          <span className="w-1.5 h-4 bg-emerald-500 rounded-full inline-block" /> Manage Doctors
+        </h2>
+        <p className="text-xs text-slate-400">These doctors appear in the Add Patient dropdown.</p>
+
+        {/* Add new */}
+        <div className="flex gap-2">
+          <input
+            value={newDoctor}
+            onChange={e => setNewDoctor(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addDoctor()}
+            placeholder="Add a new doctor or specialization..."
+            className={inputCls + " flex-1"}
+          />
+          <button
+            onClick={addDoctor}
+            className="px-4 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow transition-all hover:scale-105 active:scale-95 shrink-0"
+          >
+            + Add
+          </button>
         </div>
-      )}
+
+        {/* Doctor tags */}
+        <div className="flex flex-wrap gap-2">
+          {settings.doctors.map(d => (
+            <span key={d} className="flex items-center gap-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-full">
+              👨‍⚕️ {d}
+              <button onClick={() => removeDoctor(d)} className="text-slate-400 hover:text-rose-500 transition-colors ml-1 text-base leading-none">×</button>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Save */}
+      <button
+        onClick={handleSave}
+        className={`w-full py-3 rounded-xl text-sm font-bold transition-all shadow-lg ${
+          saved
+            ? "bg-emerald-600 text-white shadow-emerald-500/30"
+            : "bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-indigo-500/30 hover:scale-[1.01] active:scale-95"
+        }`}
+      >
+        {saved ? "✅ Settings Saved!" : "💾 Save Settings"}
+      </button>
     </div>
   );
 }

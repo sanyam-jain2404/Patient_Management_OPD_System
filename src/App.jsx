@@ -18,7 +18,9 @@ import Reports      from "./pages/Reports";
 import Activity     from "./pages/Activity";
 import Login        from "./pages/Login";
 import Signup       from "./pages/Signup";
-import Appointments from "./pages/Appointments";
+
+import { useEffect } from "react";
+import { fetchApiPatients } from "./services/apiService";
 
 const NAV_SECTIONS = [
   {
@@ -34,13 +36,12 @@ const NAV_SECTIONS = [
       { path: "/",            icon: "🧑‍⚕️", label: "All Patients"   },
       { path: "/add",         icon: "➕",   label: "Add Patient"    },
       { path: "/discharged",  icon: "🚪",   label: "Discharged"     },
-      { path: "/appointments",icon: "📅",   label: "Appointments"   },
     ],
   },
   {
     label: "Reports",
     items: [
-      { path: "/reports", icon: "📈", label: "Reports" },
+      { path: "/reports", icon: "⚙️", label: "Settings" },
       { path: "/about",   icon: "ℹ️",  label: "About"   },
       { path: "/contact", icon: "📞", label: "Contact"  },
     ],
@@ -191,7 +192,7 @@ function Layout() {
                 <Route path="/discharged"   element={<ProtectedRoute><Discharged /></ProtectedRoute>} />
                 <Route path="/reports"      element={<ProtectedRoute><Reports /></ProtectedRoute>} />
                 <Route path="/activity"     element={<ProtectedRoute><Activity /></ProtectedRoute>} />
-                <Route path="/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
+
               </Routes>
             </div>
             {!hideLayout && <Footer />}
@@ -203,6 +204,20 @@ function Layout() {
 }
 
 export default function App() {
+  useEffect(() => {
+    const initializeApiData = async () => {
+      const existingApiData = localStorage.getItem("apiPatients");
+      if (!existingApiData) {
+        const data = await fetchApiPatients();
+        if (data.length > 0) {
+          localStorage.setItem("apiPatients", JSON.stringify(data));
+          window.dispatchEvent(new Event("storage"));
+        }
+      }
+    };
+    initializeApiData();
+  }, []);
+
   return (
     <ToastProvider>
       <BrowserRouter>

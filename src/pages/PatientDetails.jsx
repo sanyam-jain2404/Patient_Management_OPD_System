@@ -80,26 +80,29 @@ export default function PatientDetails() {
 
       {/* Info grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Personal */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
-          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-indigo-500 rounded-full inline-block" /> Personal Info
+        {/* Medical Info - PRIORITIZED */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-indigo-500/20 dark:border-indigo-500/40 p-5 shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full -mr-8 -mt-8" />
+          <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+            <span className="w-1.5 h-4 bg-indigo-500 rounded-full inline-block" /> Medical Overview
           </h2>
-          <InfoRow label="Contact"     value={patient.contact}    icon="📞" />
-          <InfoRow label="Blood Group" value={patient.blood}      icon="🩸" />
-          <InfoRow label="Gender"      value={patient.gender}     icon="👤" />
-          <InfoRow label="Admitted"    value={patient.date}       icon="📅" />
+          <div className="space-y-1">
+            <InfoRow label="Primary Diagnosis" value={patient.disease} icon="🦠" />
+            <InfoRow label="Assigned Doctor"  value={patient.doctor}  icon="👨‍⚕️" />
+            <InfoRow label="Priority Level"   value={patient.priority} icon="⚡" />
+            <InfoRow label="Patient ID"       value={`#${patient.id}`} icon="🪪" />
+          </div>
         </div>
 
-        {/* Medical */}
+        {/* Personal Info */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-rose-500 rounded-full inline-block" /> Medical Info
+            <span className="w-1 h-4 bg-slate-400 rounded-full inline-block" /> Contact & Vital Info
           </h2>
-          <InfoRow label="Diagnosis"   value={patient.disease}    icon="🦠" />
-          <InfoRow label="Doctor"      value={patient.doctor}     icon="👨‍⚕️" />
-          <InfoRow label="Priority"    value={patient.priority}   icon="⚡" />
-          <InfoRow label="Patient ID"  value={`#${patient.id}`}   icon="🪪" />
+          <InfoRow label="Contact Number" value={patient.contact}    icon="📞" />
+          <InfoRow label="Blood Group"    value={patient.blood}      icon="🩸" />
+          <InfoRow label="Gender"         value={patient.gender}     icon="👤" />
+          <InfoRow label="Admission Date" value={patient.date}       icon="📅" />
         </div>
       </div>
 
