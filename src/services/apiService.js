@@ -1,45 +1,124 @@
-const DISEASES  = ["Hypertension", "Diabetes", "Asthma", "Common Cold", "Influenza", "Gastritis", "Anemia", "Migraine", "Typhoid", "Dermatitis"];
-const DOCTORS   = ["General Physician", "Cardiologist", "Dermatologist", "Orthopedic", "Neurologist", "Pediatrician", "ENT Specialist"];
-const PRIORITIES = ["Low", "Medium", "High", "Critical"];
+const API_BASE_URL = "http://localhost:5000/api";
 
-// Fallback if API is down
-const FALLBACK_USERS = [
-  { id: 1,  firstName: "Rahul",   lastName: "Sharma",  age: 34, gender: "male",   bloodGroup: "B+",  phone: "9876543210" },
-  { id: 2,  firstName: "Priya",   lastName: "Verma",   age: 28, gender: "female", bloodGroup: "A+",  phone: "9812345678" },
-  { id: 3,  firstName: "Amit",    lastName: "Kumar",   age: 45, gender: "male",   bloodGroup: "O+",  phone: "9823456789" },
-  { id: 4,  firstName: "Sunita",  lastName: "Patel",   age: 52, gender: "female", bloodGroup: "AB+", phone: "9834567890" },
-  { id: 5,  firstName: "Deepak",  lastName: "Singh",   age: 38, gender: "male",   bloodGroup: "B−",  phone: "9845678901" },
-  { id: 6,  firstName: "Kavya",   lastName: "Nair",    age: 22, gender: "female", bloodGroup: "O−",  phone: "9856789012" },
-  { id: 7,  firstName: "Rajesh",  lastName: "Gupta",   age: 60, gender: "male",   bloodGroup: "A−",  phone: "9867890123" },
-  { id: 8,  firstName: "Ananya",  lastName: "Mishra",  age: 31, gender: "female", bloodGroup: "AB−", phone: "9878901234" },
-  { id: 9,  firstName: "Vikram",  lastName: "Yadav",   age: 47, gender: "male",   bloodGroup: "B+",  phone: "9889012345" },
-  { id: 10, firstName: "Meera",   lastName: "Joshi",   age: 26, gender: "female", bloodGroup: "A+",  phone: "9890123456" },
-];
-
-function mapUsers(users) {
-  return users.map(u => ({
-    id:       1000 + u.id,
-    name:     `${u.firstName} ${u.lastName}`,
-    age:      u.age,
-    gender:   u.gender === "male" ? "Male" : "Female",
-    blood:    u.bloodGroup || "O+",
-    contact:  String(u.phone).replace(/[^\d]/g, "").slice(0, 10),
-    disease:  DISEASES[Math.floor(Math.random() * DISEASES.length)],
-    doctor:   DOCTORS[Math.floor(Math.random() * DOCTORS.length)],
-    date:     new Date().toISOString().slice(0, 10),
-    priority: PRIORITIES[Math.floor(Math.random() * PRIORITIES.length)],
-    notes:    "Fetched from external clinical registry.",
-  }));
-}
-export const fetchApiPatients = async () => {
-  try {
-    // dummyjson returns name, age, gender, bloodGroup, phone — perfect for patients
-    const res = await fetch("https://dummyjson.com/users?limit=10&select=id,firstName,lastName,age,gender,bloodGroup,phone");
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    const data = await res.json();
-    return mapUsers(data.users);
-  } catch (err) {
-    console.warn("API unavailable, using local fallback.", err.message);
-    return mapUsers(FALLBACK_USERS);
+const getHeaders = () => {
+  const token = localStorage.getItem("token");
+  const headers = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
   }
+  return headers;
+};
+
+export const apiRequest = async (endpoint, method = "GET", data = null) => {
+  const config = {
+    method,
+    headers: getHeaders(),
+  };
+
+  if (data) {
+    config.body = JSON.stringify(data);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+
+  // Check for HTTP errors before parsing JSON
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Something went wrong");
+  }
+
+  const result = await response.json();
+  return result;
+};
+
+// Auth services
+export const login = async (credentials) => {
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(credentials),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message);
+  return data;
+};
+
+export const register = async (userData) => {
+  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(userData),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message);
+  return data;
+};
+
+export const fetchMe = async () => {
+  return await apiRequest("/auth/me");
+};
+
+// Appointment services
+export const bookAppointment = async (appointmentData) => {
+  return await apiRequest("/appointments", "POST", appointmentData);
+};
+
+export const fetchAppointments = async (params = {}) => {
+  let endpoint = "/appointments";
+  const query = new URLSearchParams(params).toString();
+  if (query) endpoint += `?${query}`;
+  return await apiRequest(endpoint);
+};
+
+export const updateAppointmentStatus = async (id, statusData) => {
+  return await apiRequest(`/appointments/${id}/status`, "PATCH", statusData);
+};
+
+// Department services
+export const fetchDepartments = async () => {
+  return await apiRequest("/departments");
+};
+
+// Doctor services
+export const fetchDoctors = async (params = {}) => {
+  let endpoint = "/doctors";
+  const query = new URLSearchParams(params).toString();
+  if (query) endpoint += `?${query}`;
+  return await apiRequest(endpoint);
+};
+
+export const fetchMyDoctorProfile = async () => {
+  return await apiRequest("/doctors/me");
+};
+
+// Consultation services
+export const recordConsultation = async (consultationData) => {
+  return await apiRequest("/consultations", "POST", consultationData);
+};
+
+export const fetchPatientTreatmentHistory = async (patientId) => {
+  return await apiRequest(`/consultations/patient/${patientId}`);
+};
+// Patient services
+
+export const fetchApiPatients = async () => {
+  return await apiRequest("/patients");
+};
+
+export const createApiPatient = async (patientData) => {
+  return await apiRequest("/patients", "POST", patientData);
+};
+
+export const fetchApiPatientById = async (id) => {
+  return await apiRequest(`/patients/${id}`);
+};
+
+export const updateApiPatient = async (id, patientData) => {
+  return await apiRequest(`/patients/${id}`, "PUT", patientData);
+};
+
+export const deleteApiPatient = async (id) => {
+  return await apiRequest(`/patients/${id}`, "DELETE");
 };

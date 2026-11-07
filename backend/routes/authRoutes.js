@@ -4,23 +4,37 @@ import User from "../models/User.js";
 import jwt from "jsonwebtoken";
 import protect from "../middleware/authMiddleware.js";
 import authorizeRoles from "../middleware/authorizeRoles.js";
+import Doctor from "../models/Doctor.js";
 
 const router = express.Router();
+
 router.post("/register", async (req, res) => {
     try {
-        const { name, email, password, role } = req.body;
-        if (!name || !email || !password) {
+        const {
+            name,
+            email,
+            password,
+            role,
+            specialization,
+            qualification,
+            experience,
+            departmentId
+        } = req.body;
+
+        if (!name?.trim() || !email?.trim() || !password) {
             return res.status(400).json({
                 success: false,
                 message: "Name, email and password are required"
             });
         }
+
         if (password.length < 8) {
             return res.status(400).json({
                 success: false,
                 message: "Password must be at least 8 characters"
             });
         }
+
         const selectedRole = role || "patient";
 
         if (!["patient", "doctor"].includes(selectedRole)) {
@@ -29,8 +43,24 @@ router.post("/register", async (req, res) => {
                 message: "Invalid role. Admin registration is not allowed."
             });
         }
+
+        // Doctor-specific validation
+        if (selectedRole === "doctor") {
+            if (!specialization?.trim() || !qualification?.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Specialization and qualification are required"
+                });
+            }
+        }
+
+        // Normalize role - ensure it's lowercase for consistency
+        const normalizedRole = selectedRole.toLowerCase();
+
+        const normalizedEmail = email.toLowerCase().trim();
+
         const existingUser = await User.findOne({
-            email: email.toLowerCase().trim()
+            email: normalizedEmail
         });
 
         if (existingUser) {
@@ -39,16 +69,57 @@ router.post("/register", async (req, res) => {
                 message: "An account with this email already exists"
             });
         }
+
         const hashedPassword = await bcrypt.hash(password, 12);
+
+        // Resolve departmentId for doctor if omitted
+        let assignedDeptId = departmentId;
+        if (selectedRole === "doctor" && !assignedDeptId && specialization) {
+            const Department = (await import("../models/Department.js")).default;
+            const baseName = specialization.trim().replace(/s$/, "");
+            const foundDept = await Department.findOne({
+                name: new RegExp("^" + baseName, "i")
+            });
+            if (foundDept) {
+                assignedDeptId = foundDept._id;
+            }
+        }
+
+        // Create common User account
         const user = await User.create({
-            name,
-            email: email.toLowerCase().trim(),
+            name: name.trim(),
+            email: normalizedEmail,
             password: hashedPassword,
-            role: selectedRole,
-            isVerified: selectedRole === "patient"
+            role: normalizedRole,
+            isVerified: normalizedRole === "patient",
+
+            // Doctor-specific fields
+            ...(normalizedRole === "doctor" && {
+                specialization: specialization.trim(),
+                qualification: qualification.trim(),
+                experience: Number(experience || 0),
+                departmentId: assignedDeptId || undefined
+            })
         });
 
-        res.status(201).json({
+        // Create separate Doctor profile
+        if (selectedRole === "doctor") {
+            try {
+                await Doctor.create({
+                    userId: user._id,
+                    specialization: specialization.trim(),
+                    qualification: qualification.trim(),
+                    experience: Number(experience || 0),
+                    departmentId: assignedDeptId || undefined
+                });
+            } catch (profileError) {
+                // Remove User if Doctor profile creation fails
+                await User.findByIdAndDelete(user._id);
+                throw profileError;
+            }
+        }
+
+        return res.status(201).json({
             success: true,
             message: selectedRole === "doctor"
                 ? "Doctor registered. Verification is pending."
@@ -61,6 +132,7 @@ router.post("/register", async (req, res) => {
                 isVerified: user.isVerified
             }
         });
+
     } catch (error) {
         if (error.code === 11000) {
             return res.status(409).json({
@@ -69,14 +141,25 @@ router.post("/register", async (req, res) => {
             });
         }
 
-        console.error("Registration error:", error.message);
+        if (
+            error.name === "ValidationError" ||
+            error.name === "CastError"
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: error.message
+            });
+        }
 
-        res.status(500).json({
+        console.error("Registration error:", error);
+
+        return res.status(500).json({
             success: false,
             message: "Unable to register user"
         });
     }
 });
+
 
 router.post("/login", async (req, res) => {
     try {

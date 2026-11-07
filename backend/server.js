@@ -5,6 +5,10 @@ import connectDB from "./config/db.js";
 import patientRoutes from "./routes/patientRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import appointmentRoutes from "./routes/appointmentRoutes.js";
+import departmentRoutes from "./routes/departmentRoutes.js";
+import doctorRoutes from "./routes/doctorRoutes.js";
+import consultationRoutes from "./routes/consultationRoutes.js";
 import helmet from "helmet";
 
 dotenv.config();
@@ -15,6 +19,10 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/patients", patientRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/appointments", appointmentRoutes);
+app.use("/api/departments", departmentRoutes);
+app.use("/api/doctors", doctorRoutes);
+app.use("/api/consultations", consultationRoutes);
 app.get("/", (req, res) => {
     res.status(200).json({
         success: true,

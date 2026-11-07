@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useToast } from "../components/Toast";
+import { login } from "../services/apiService";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -14,17 +15,19 @@ export default function Login() {
   const handleLogin = async e => {
     e.preventDefault();
     setLoading(true);
-    await new Promise(r => setTimeout(r, 700)); // simulated delay
-    const user = JSON.parse(localStorage.getItem("user"));
-    if (user && user.email === form.email && user.password === form.password) {
+    try {
+      const data = await login({ email: form.email, password: form.password });
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
       localStorage.setItem("auth", "true");
       window.dispatchEvent(new Event("storage"));
-      toast("Welcome back, " + (user.name || "Admin") + "! 👋", "success");
+      toast(`Welcome back, ${data.user.name}! 👋`, "success");
       navigate("/");
-    } else {
-      toast("Invalid email or password. Please try again.", "error");
+    } catch (err) {
+      toast(err.message, "error");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

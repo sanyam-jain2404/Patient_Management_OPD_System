@@ -18,6 +18,8 @@ import Reports      from "./pages/Reports";
 import Activity     from "./pages/Activity";
 import Login        from "./pages/Login";
 import Signup       from "./pages/Signup";
+import BookAppointment from "./pages/BookAppointment";
+import DoctorVerification from "./pages/DoctorVerification";
 
 import { useEffect } from "react";
 import { fetchApiPatients } from "./services/apiService";
@@ -27,21 +29,28 @@ const NAV_SECTIONS = [
     label: "Overview",
     items: [
       { path: "/dashboard", icon: "📊", label: "Dashboard" },
-      { path: "/activity",  icon: "🕒", label: "Activity"  },
+      { path: "/activity",  icon: "🕒", label: "Activity", roles: ["admin", "doctor"]  },
     ],
   },
   {
-    label: "Patients",
+    label: "Medical",
     items: [
-      { path: "/",            icon: "🧑‍⚕️", label: "All Patients"   },
-      { path: "/add",         icon: "➕",   label: "Add Patient"    },
-      { path: "/discharged",  icon: "🚪",   label: "Discharged"     },
+      { path: "/book",        icon: "📅", label: "Book Appointment", roles: ["patient", "admin"] },
+      {
+        path: "/verify-doctors",
+        icon: "🛡️",
+        label: "Verify Doctors",
+        roles: ["admin"],
+      },
+      { path: "/",            icon: "🧑‍⚕️", label: "All Patients", roles: ["admin", "doctor"]   },
+      { path: "/add",         icon: "➕",   label: "Add Patient", roles: ["admin"]    },
+      { path: "/discharged",  icon: "🚪",   label: "Discharged", roles: ["admin"]     },
     ],
   },
   {
     label: "Reports",
     items: [
-      { path: "/reports", icon: "⚙️", label: "Settings" },
+      { path: "/reports", icon: "⚙️", label: "Settings", roles: ["admin"] },
       { path: "/about",   icon: "ℹ️",  label: "About"   },
       { path: "/contact", icon: "📞", label: "Contact"  },
     ],
@@ -53,10 +62,21 @@ function Sidebar({ dark, toggleDark }) {
   const location  = useLocation();
   const user      = JSON.parse(localStorage.getItem("user") || "{}");
   const userName  = user?.name || "Admin";
+  const userRole  = user?.role || "patient";
   const initials  = userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+
+  const filteredSections = NAV_SECTIONS.map(section => ({
+    ...section,
+    items: section.items.filter(item => {
+      if (!item.roles) return true;
+      return item.roles.includes(userRole);
+    })
+  })).filter(section => section.items.length > 0);
 
   const logout = () => {
     localStorage.removeItem("auth");
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
     window.dispatchEvent(new Event("storage"));
     navigate("/login");
   };
@@ -76,7 +96,7 @@ function Sidebar({ dark, toggleDark }) {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-6">
-        {NAV_SECTIONS.map(section => (
+        {filteredSections.map(section => (
           <div key={section.label}>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest px-2 mb-2">
               {section.label}
@@ -182,6 +202,8 @@ function Layout() {
               <Routes>
                 <Route path="/login"   element={<Login />} />
                 <Route path="/signup"  element={<Signup />} />
+                <Route path="/book"         element={<ProtectedRoute><BookAppointment /></ProtectedRoute>} />
+                <Route path="/verify-doctors" element={<ProtectedRoute><DoctorVerification /></ProtectedRoute>} />
                 <Route path="/about"   element={<ProtectedRoute><About /></ProtectedRoute>} />
                 <Route path="/contact" element={<ProtectedRoute><Contact /></ProtectedRoute>} />
                 <Route path="/dashboard"    element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
