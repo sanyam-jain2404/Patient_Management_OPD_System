@@ -6,18 +6,18 @@ import Header from "./components/Header";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-import About        from "./pages/About";
-import Contact      from "./pages/Contact";
-import Home         from "./pages/Home";
-import Dashboard    from "./pages/Dashboard";
-import AddPatient   from "./pages/AddPatient";
+import About from "./pages/About";
+import Contact from "./pages/Contact";
+import Home from "./pages/Home";
+import Dashboard from "./pages/Dashboard";
+import AddPatient from "./pages/AddPatient";
 import PatientDetails from "./pages/PatientDetails";
 import LeavePatient from "./pages/LeavePatient";
-import Discharged   from "./pages/Discharged";
-import Reports      from "./pages/Reports";
-import Activity     from "./pages/Activity";
-import Login        from "./pages/Login";
-import Signup       from "./pages/Signup";
+import Discharged from "./pages/Discharged";
+import Reports from "./pages/Reports";
+import Activity from "./pages/Activity";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
 import BookAppointment from "./pages/BookAppointment";
 import DoctorVerification from "./pages/DoctorVerification";
 
@@ -29,41 +29,41 @@ const NAV_SECTIONS = [
     label: "Overview",
     items: [
       { path: "/dashboard", icon: "📊", label: "Dashboard" },
-      { path: "/activity",  icon: "🕒", label: "Activity", roles: ["admin", "doctor"]  },
+      { path: "/activity", icon: "🕒", label: "Activity", roles: ["admin", "doctor"] },
     ],
   },
   {
     label: "Medical",
     items: [
-      { path: "/book",        icon: "📅", label: "Book Appointment", roles: ["patient", "admin"] },
+      { path: "/book", icon: "📅", label: "Book Appointment", roles: ["patient", "admin"] },
       {
         path: "/verify-doctors",
         icon: "🛡️",
         label: "Verify Doctors",
         roles: ["admin"],
       },
-      { path: "/",            icon: "🧑‍⚕️", label: "All Patients", roles: ["admin", "doctor"]   },
-      { path: "/add",         icon: "➕",   label: "Add Patient", roles: ["admin"]    },
-      { path: "/discharged",  icon: "🚪",   label: "Discharged", roles: ["admin"]     },
+      { path: "/", icon: "🧑‍⚕️", label: "All Patients", roles: ["admin", "doctor"] },
+      { path: "/add", icon: "➕", label: "Add Patient", roles: ["admin"] },
+      { path: "/discharged", icon: "🚪", label: "Discharged", roles: ["admin"] },
     ],
   },
   {
     label: "Reports",
     items: [
       { path: "/reports", icon: "⚙️", label: "Settings", roles: ["admin"] },
-      { path: "/about",   icon: "ℹ️",  label: "About"   },
-      { path: "/contact", icon: "📞", label: "Contact"  },
+      { path: "/about", icon: "ℹ️", label: "About" },
+      { path: "/contact", icon: "📞", label: "Contact" },
     ],
   },
 ];
 
 function Sidebar({ dark, toggleDark }) {
-  const navigate  = useNavigate();
-  const location  = useLocation();
-  const user      = JSON.parse(localStorage.getItem("user") || "{}");
-  const userName  = user?.name || "Admin";
-  const userRole  = user?.role || "patient";
-  const initials  = userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const userName = user?.name || "Admin";
+  const userRole = user?.role || "patient";
+  const initials = userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
   const filteredSections = NAV_SECTIONS.map(section => ({
     ...section,
@@ -142,9 +142,8 @@ function Sidebar({ dark, toggleDark }) {
 
           {/* Pill track */}
           <div
-            className={`relative flex items-center w-12 h-6 rounded-full transition-colors duration-300 ${
-              dark ? "bg-indigo-600" : "bg-slate-600"
-            }`}
+            className={`relative flex items-center w-12 h-6 rounded-full transition-colors duration-300 ${dark ? "bg-indigo-600" : "bg-slate-600"
+              }`}
           >
             {/* Icons inside track */}
             <span className="absolute left-1 text-[11px] select-none">🌙</span>
@@ -152,9 +151,8 @@ function Sidebar({ dark, toggleDark }) {
 
             {/* Sliding thumb */}
             <span
-              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 ${
-                dark ? "translate-x-6" : "translate-x-0.5"
-              }`}
+              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 ${dark ? "translate-x-6" : "translate-x-0.5"
+                }`}
             />
           </div>
         </button>
@@ -184,7 +182,7 @@ function Sidebar({ dark, toggleDark }) {
 }
 
 function Layout() {
-  const location  = useLocation();
+  const location = useLocation();
   const [dark, toggleDark] = useDarkMode();
 
   const hideLayout = location.pathname === "/login" || location.pathname === "/signup";
@@ -199,23 +197,125 @@ function Layout() {
         <main className="flex-1 overflow-y-auto">
           <div className="p-6 min-h-full flex flex-col">
             <div className="flex-1">
-              <Routes>
-                <Route path="/login"   element={<Login />} />
-                <Route path="/signup"  element={<Signup />} />
-                <Route path="/book"         element={<ProtectedRoute><BookAppointment /></ProtectedRoute>} />
-                <Route path="/verify-doctors" element={<ProtectedRoute><DoctorVerification /></ProtectedRoute>} />
-                <Route path="/about"   element={<ProtectedRoute><About /></ProtectedRoute>} />
-                <Route path="/contact" element={<ProtectedRoute><Contact /></ProtectedRoute>} />
-                <Route path="/dashboard"    element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                <Route path="/"             element={<ProtectedRoute><Home /></ProtectedRoute>} />
-                <Route path="/add"          element={<ProtectedRoute><AddPatient /></ProtectedRoute>} />
-                <Route path="/patient/:id"  element={<ProtectedRoute><PatientDetails /></ProtectedRoute>} />
-                <Route path="/leave/:id"    element={<ProtectedRoute><LeavePatient /></ProtectedRoute>} />
-                <Route path="/discharged"   element={<ProtectedRoute><Discharged /></ProtectedRoute>} />
-                <Route path="/reports"      element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-                <Route path="/activity"     element={<ProtectedRoute><Activity /></ProtectedRoute>} />
 
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
+
+                {/* Routes accessible to all logged-in users */}
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRoute allowedRoles={["patient", "doctor", "admin"]}>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/about"
+                  element={
+                    <ProtectedRoute>
+                      <About />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/contact"
+                  element={
+                    <ProtectedRoute>
+                      <Contact />
+                    </ProtectedRoute>
+                  }
+                />
+
+
+                <Route
+                  path="/book"
+                  element={
+                    <ProtectedRoute allowedRoles={["patient", "admin"]}>
+                      <BookAppointment />
+                    </ProtectedRoute>
+                  }
+                />
+
+
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "doctor"]}>
+                      <Home />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/activity"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "doctor"]}>
+                      <Activity />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/patient/:id"
+                  element={
+                    <ProtectedRoute allowedRoles={["patient", "doctor", "admin"]}>
+                      <PatientDetails />
+                    </ProtectedRoute>
+                  }
+                />
+
+
+                <Route
+                  path="/verify-doctors"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin"]}>
+                      <DoctorVerification />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/add"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin"]}>
+                      <AddPatient />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/leave/:id"
+                  element={
+                    <ProtectedRoute allowedRoles={["doctor", "admin"]}>
+                      <LeavePatient />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/discharged"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin"]}>
+                      <Discharged />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/reports"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin"]}>
+                      <Reports />
+                    </ProtectedRoute>
+                  }
+                />
               </Routes>
+
             </div>
             {!hideLayout && <Footer />}
           </div>

@@ -5,6 +5,8 @@ import jwt from "jsonwebtoken";
 import protect from "../middleware/authMiddleware.js";
 import authorizeRoles from "../middleware/authorizeRoles.js";
 import Doctor from "../models/Doctor.js";
+import mongoose from "mongoose";
+import Patient from "../models/Patient.js";
 
 const router = express.Router();
 
@@ -15,10 +17,18 @@ router.post("/register", async (req, res) => {
             email,
             password,
             role,
+
+            // Existing Doctor fields - unchanged
             specialization,
             qualification,
             experience,
-            departmentId
+            departmentId,
+
+            // New Patient fields
+            phone,
+            dateOfBirth,
+            gender,
+            address
         } = req.body;
 
         if (!name?.trim() || !email?.trim() || !password) {
@@ -71,6 +81,133 @@ router.post("/register", async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 12);
+
+        // Patient-specific registration
+        if (normalizedRole === "patient") {
+
+            // Validate required patient details
+            if (!phone?.trim() || !dateOfBirth || !gender) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Phone, date of birth and gender are required."
+                });
+            }
+
+            // Validate phone number
+            const cleanPhone = phone.trim().replace(/[\s()-]/g, "");
+
+            if (!/^\+?\d{10,15}$/.test(cleanPhone)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Please enter a valid phone number."
+                });
+            }
+
+            // Validate date of birth format
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid date of birth."
+                });
+            }
+
+            const birthDate = new Date(`${dateOfBirth}T00:00:00.000Z`);
+
+            if (
+                Number.isNaN(birthDate.getTime()) ||
+                birthDate.toISOString().slice(0, 10) !== dateOfBirth
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Please enter a valid date of birth."
+                });
+            }
+
+            const today = new Date();
+
+            const todayUTC = Date.UTC(
+                today.getUTCFullYear(),
+                today.getUTCMonth(),
+                today.getUTCDate()
+            );
+
+            if (birthDate.getTime() > todayUTC) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Date of birth cannot be in the future."
+                });
+            }
+
+            // Calculate age automatically
+            let age = today.getUTCFullYear() - birthDate.getUTCFullYear();
+
+            const beforeBirthday =
+                today.getUTCMonth() < birthDate.getUTCMonth() ||
+                (
+                    today.getUTCMonth() === birthDate.getUTCMonth() &&
+                    today.getUTCDate() < birthDate.getUTCDate()
+                );
+
+            if (beforeBirthday) {
+                age--;
+            }
+
+            // Validate gender
+            if (!["Male", "Female", "Other"].includes(gender)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid gender selection."
+                });
+            }
+
+            // Create User and Patient together using transaction
+            const session = await mongoose.startSession();
+
+            try {
+                await session.withTransaction(async () => {
+
+                    const [user] = await User.create(
+                        [{
+                            name: name.trim(),
+                            email: normalizedEmail,
+                            password: hashedPassword,
+                            role: "patient",
+                            isVerified: true,
+                            phone: cleanPhone
+                        }],
+                        { session }
+                    );
+
+                    await Patient.create(
+                        [{
+                            userId: user._id,
+                            name: name.trim(),
+                            email: normalizedEmail,
+                            phone: cleanPhone,
+                            dateOfBirth: birthDate,
+                            age,
+                            gender,
+                            address: address?.trim() || ""
+                        }],
+                        { session }
+                    );
+                });
+
+            } finally {
+                await session.endSession();
+            }
+
+            return res.status(201).json({
+                success: true,
+                message: "Patient registered successfully.",
+                data: {
+                    name,
+                    email: normalizedEmail,
+                    role: "patient"
+                }
+            });
+        }
+
 
         // Resolve departmentId for doctor if omitted
         let assignedDeptId = departmentId;

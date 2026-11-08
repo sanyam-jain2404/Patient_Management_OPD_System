@@ -22,7 +22,11 @@ export default function Login() {
       localStorage.setItem("auth", "true");
       window.dispatchEvent(new Event("storage"));
       toast(`Welcome back, ${data.user.name}! 👋`, "success");
-      navigate("/");
+      if (data.user.role === "patient") {
+        navigate("/dashboard");
+      } else {
+        navigate("/");
+      }
     } catch (err) {
       toast(err.message, "error");
     } finally {

@@ -11,9 +11,17 @@ export default function Signup() {
     email: "",
     password: "",
     role: "patient",
+
+    // Patient details
+    phone: "",
+    dateOfBirth: "",
+    gender: "",
+    address: "",
+
+    // Existing Doctor details — unchanged
     specialization: "",
     qualification: "",
-    experience: 0
+    experience: 0,
   });
   const [loading, setLoading] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
@@ -34,11 +42,18 @@ export default function Signup() {
         password: form.password,
         role: form.role,
 
+        ...(form.role === "patient" && {
+          phone: form.phone,
+          dateOfBirth: form.dateOfBirth,
+          gender: form.gender,
+          address: form.address,
+        }),
+
         ...(form.role === "doctor" && {
           specialization: form.specialization,
           qualification: form.qualification,
-          experience: Number(form.experience)
-        })
+          experience: Number(form.experience),
+        }),
       });
       toast("Account created successfully! Please log in.", "success");
       navigate("/login");
@@ -119,6 +134,67 @@ export default function Signup() {
                 <option value="doctor">Doctor (Pending Verification)</option>
               </select>
             </div>
+
+            {/* Patient Details */}
+            {form.role === "patient" && (
+              <div className="space-y-4">
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Phone Number</label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    value={form.phone}
+                    onChange={handleChange}
+                    placeholder="Enter phone number"
+                    required
+                    className="w-full bg-slate-800/60 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Date of Birth</label>
+                  <input
+                    type="date"
+                    name="dateOfBirth"
+                    value={form.dateOfBirth}
+                    onChange={handleChange}
+                    max={new Date().toISOString().split("T")[0]}
+                    required
+                    className="w-full bg-slate-800/60 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Gender</label>
+                  <select
+                    name="gender"
+                    value={form.gender}
+                    onChange={handleChange}
+                    required
+                    className="w-full bg-slate-800/60 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Address</label>
+                  <textarea
+                    name="address"
+                    value={form.address}
+                    onChange={handleChange}
+                    placeholder="Enter your address"
+                    required
+                    className="w-full bg-slate-800/60 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+
+              </div>
+            )}
 
             {form.role === "doctor" && (
               <div className="space-y-4">

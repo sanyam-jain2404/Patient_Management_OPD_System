@@ -56,7 +56,7 @@ export default function BookAppointment() {
     try {
       const data = await bookAppointment({
         ...form,
-        patientId: user._id
+        patientId: user.id
       });
       setResult(data.data);
       toast(data.message, "success");
