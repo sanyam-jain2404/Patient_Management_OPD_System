@@ -1,15 +1,20 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import {
+  fetchMyPatientProfile,
+  fetchApiPatientById,
+  fetchPatientTreatmentHistory
+} from "../services/apiService";
 
 const PRIORITY_STYLES = {
   Critical: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
-  High:     "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  Medium:   "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-  Low:      "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  High: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  Medium: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  Low: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
 };
 
 function avatarColor(name = "") {
-  const colors = ["from-indigo-500 to-indigo-700","from-violet-500 to-violet-700","from-emerald-500 to-emerald-700","from-rose-500 to-rose-700","from-amber-500 to-amber-700","from-cyan-500 to-cyan-700"];
+  const colors = ["from-indigo-500 to-indigo-700", "from-violet-500 to-violet-700", "from-emerald-500 to-emerald-700", "from-rose-500 to-rose-700", "from-amber-500 to-amber-700", "from-cyan-500 to-cyan-700"];
   let hash = 0;
   for (let c of name) hash = (hash * 31 + c.charCodeAt(0)) & 0xffffffff;
   return colors[Math.abs(hash) % colors.length];
@@ -28,16 +33,65 @@ function InfoRow({ label, value, icon }) {
 }
 
 export default function PatientDetails() {
-  const { id }    = useParams();
-  const navigate  = useNavigate();
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [patient, setPatient] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [treatmentHistory, setTreatmentHistory] = useState([]);
 
   useEffect(() => {
-    const api   = JSON.parse(localStorage.getItem("apiPatients")) || [];
-    const local = JSON.parse(localStorage.getItem("patients"))    || [];
-    const found = [...api, ...local].find(p => p.id === Number(id));
-    setPatient(found);
+    const loadPatient = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const user = JSON.parse(localStorage.getItem("user"));
+
+        let response;
+
+        if (user?.role === "patient") {
+          response = await fetchMyPatientProfile();
+        } else {
+          response = await fetchApiPatientById(id);
+        }
+
+        const patientData = response.data;
+
+        setPatient({
+          ...patientData,
+          id: patientData._id,
+          contact: patientData.phone,
+          blood: patientData.bloodGroup,
+          date: patientData.createdAt
+            ? new Date(patientData.createdAt).toLocaleDateString()
+            : ""
+        });
+
+        const historyResponse = await fetchPatientTreatmentHistory(
+          patientData._id
+        );
+
+        setTreatmentHistory(historyResponse.data || []);
+
+      } catch (err) {
+        console.error("Patient details error:", err);
+        setError("Unable to load patient details.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPatient();
   }, [id]);
+
+  if (loading) {
+    return <div className="text-center py-20">Loading patient details...</div>;
+  }
+
+  if (error) {
+    return <div className="text-center py-20 text-rose-500">{error}</div>;
+  }
 
   if (!patient) {
     return (
@@ -49,7 +103,7 @@ export default function PatientDetails() {
     );
   }
 
-  const initials  = patient.name?.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+  const initials = patient.name?.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   const priorityCls = PRIORITY_STYLES[patient.priority] || PRIORITY_STYLES.Low;
 
   return (
@@ -88,9 +142,9 @@ export default function PatientDetails() {
           </h2>
           <div className="space-y-1">
             <InfoRow label="Primary Diagnosis" value={patient.disease} icon="🦠" />
-            <InfoRow label="Assigned Doctor"  value={patient.doctor}  icon="👨‍⚕️" />
-            <InfoRow label="Priority Level"   value={patient.priority} icon="⚡" />
-            <InfoRow label="Patient ID"       value={`#${patient.id}`} icon="🪪" />
+            <InfoRow label="Assigned Doctor" value={patient.doctor} icon="👨‍⚕️" />
+            <InfoRow label="Priority Level" value={patient.priority} icon="⚡" />
+            <InfoRow label="Patient ID" value={`#${patient.id}`} icon="🪪" />
           </div>
         </div>
 
@@ -99,10 +153,10 @@ export default function PatientDetails() {
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
             <span className="w-1 h-4 bg-slate-400 rounded-full inline-block" /> Contact & Vital Info
           </h2>
-          <InfoRow label="Contact Number" value={patient.contact}    icon="📞" />
-          <InfoRow label="Blood Group"    value={patient.blood}      icon="🩸" />
-          <InfoRow label="Gender"         value={patient.gender}     icon="👤" />
-          <InfoRow label="Admission Date" value={patient.date}       icon="📅" />
+          <InfoRow label="Contact Number" value={patient.contact} icon="📞" />
+          <InfoRow label="Blood Group" value={patient.blood} icon="🩸" />
+          <InfoRow label="Gender" value={patient.gender} icon="👤" />
+          <InfoRow label="Admission Date" value={patient.date} icon="📅" />
         </div>
       </div>
 

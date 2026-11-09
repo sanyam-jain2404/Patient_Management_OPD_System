@@ -8,6 +8,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 
 import About from "./pages/About";
 import Contact from "./pages/Contact";
+import MyProfile from "./pages/MyProfile";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import AddPatient from "./pages/AddPatient";
@@ -41,6 +42,12 @@ const NAV_SECTIONS = [
         icon: "🛡️",
         label: "Verify Doctors",
         roles: ["admin"],
+      },
+      {
+        path: "/my-profile",
+        icon: "👤",
+        label: "My Profile",
+        roles: ["patient"],
       },
       { path: "/", icon: "🧑‍⚕️", label: "All Patients", roles: ["admin", "doctor"] },
       { path: "/add", icon: "➕", label: "Add Patient", roles: ["admin"] },
@@ -209,6 +216,14 @@ function Layout() {
                   element={
                     <ProtectedRoute allowedRoles={["patient", "doctor", "admin"]}>
                       <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/my-profile"
+                  element={
+                    <ProtectedRoute allowedRoles={["patient"]}>
+                      <MyProfile />
                     </ProtectedRoute>
                   }
                 />

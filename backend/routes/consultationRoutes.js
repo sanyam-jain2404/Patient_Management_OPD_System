@@ -114,48 +114,94 @@ router.post("/", protect, authorizeRoles("doctor"), async (req, res) => {
  * View treatment history for a specific patient.
  * Patients can view their own history; Doctors/Admins can view authorized patient history.
  */
-router.get("/patient/:patientId", protect, async (req, res) => {
-    try {
-        const { patientId } = req.params;
-        if (!mongoose.isValidObjectId(patientId)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid patient ID."
-            });
-        }
 
-        if (req.user.role === "patient") {
-            const Patient = (await import("../models/Patient.js")).default;
-            const patientRecord = await Patient.findOne({ userId: req.user._id });
-            if (!patientRecord || patientRecord._id.toString() !== patientId) {
-                return res.status(403).json({
+router.get(
+    "/patient/:patientId",
+    protect,
+    authorizeRoles("patient", "doctor", "admin"),
+    async (req, res) => {
+        try {
+            const { patientId } = req.params;
+
+            if (!mongoose.isValidObjectId(patientId)) {
+                return res.status(400).json({
                     success: false,
-                    message: "Access denied to this patient's history."
+                    message: "Invalid patient ID."
                 });
             }
-        }
 
-        const consultations = await Consultation.find({ patientId, isDeleted: false })
-            .populate("doctorId", "specialization")
-            .populate({
-                path: "doctorId",
-                populate: { path: "userId", select: "name" }
+            // Patient can only view their own history
+            if (req.user.role === "patient") {
+                const Patient = (await import("../models/Patient.js")).default;
+
+                const patientRecord = await Patient.findOne({
+                    userId: req.user._id
+                });
+
+                if (!patientRecord || patientRecord._id.toString() !== patientId) {
+                    return res.status(403).json({
+                        success: false,
+                        message: "Access denied."
+                    });
+                }
+            }
+
+            // Doctor can only view patients assigned to them
+            if (req.user.role === "doctor") {
+                const doctorRecord = await Doctor.findOne({
+                    userId: req.user._id
+                });
+
+                if (!doctorRecord) {
+                    return res.status(403).json({
+                        success: false,
+                        message: "Doctor profile not found."
+                    });
+                }
+
+                const hasAppointment = await Appointment.exists({
+                    patientId,
+                    doctorId: doctorRecord._id
+                });
+
+                if (!hasAppointment) {
+                    return res.status(403).json({
+                        success: false,
+                        message: "You are not authorized to view this history."
+                    });
+                }
+            }
+
+            const consultations = await Consultation.find({
+                patientId,
+                isDeleted: false
             })
-            .populate("departmentId", "name")
-            .sort({ consultationDate: -1 });
+                .populate({
+                    path: "doctorId",
+                    populate: {
+                        path: "userId",
+                        select: "name"
+                    }
+                })
+                .populate("departmentId", "name")
+                .sort({ consultationDate: -1 });
 
-        res.status(200).json({
-            success: true,
-            count: consultations.length,
-            data: consultations
-        });
-    } catch (error) {
-        console.error("Fetch treatment history error:", error.message);
-        res.status(500).json({
-            success: false,
-            message: "Unable to fetch treatment history"
-        });
+            return res.status(200).json({
+                success: true,
+                count: consultations.length,
+                data: consultations
+            });
+
+        } catch (error) {
+            console.error("Fetch treatment history error:", error.message);
+
+            return res.status(500).json({
+                success: false,
+                message: "Unable to fetch treatment history."
+            });
+        }
     }
-});
+);
+
 
 export default router;

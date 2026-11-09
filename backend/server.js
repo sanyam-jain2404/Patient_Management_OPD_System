@@ -9,6 +9,7 @@ import appointmentRoutes from "./routes/appointmentRoutes.js";
 import departmentRoutes from "./routes/departmentRoutes.js";
 import doctorRoutes from "./routes/doctorRoutes.js";
 import consultationRoutes from "./routes/consultationRoutes.js";
+import activityRoutes from "./routes/activityRoutes.js";
 import helmet from "helmet";
 
 dotenv.config();
@@ -23,6 +24,7 @@ app.use("/api/appointments", appointmentRoutes);
 app.use("/api/departments", departmentRoutes);
 app.use("/api/doctors", doctorRoutes);
 app.use("/api/consultations", consultationRoutes);
+app.use("/api/activities", activityRoutes);
 app.get("/", (req, res) => {
     res.status(200).json({
         success: true,

@@ -74,11 +74,10 @@ function PatientDashboard({ appointments }) {
                   <td className="py-4 px-2 font-medium text-slate-800 dark:text-slate-100">Dr. {appt.doctorId.userId.name}</td>
                   <td className="py-4 px-2 text-slate-500">#{appt.tokenNumber}</td>
                   <td className="py-4 px-2">
-                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
-                      appt.status === "Completed" ? "bg-emerald-100 text-emerald-600" :
-                      appt.status === "Cancelled" ? "bg-rose-100 text-rose-600" :
-                      "bg-indigo-100 text-indigo-600"
-                    }`}>{appt.status}</span>
+                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${appt.status === "Completed" ? "bg-emerald-100 text-emerald-600" :
+                        appt.status === "Cancelled" ? "bg-rose-100 text-rose-600" :
+                          "bg-indigo-100 text-indigo-600"
+                      }`}>{appt.status}</span>
                   </td>
                 </tr>
               ))}
@@ -91,7 +90,7 @@ function PatientDashboard({ appointments }) {
   );
 }
 
-function DoctorDashboard({ appointments, onStatusUpdate }) {
+function DoctorDashboard({ appointments, onStatusUpdate, onRefresh }) {
   const [activeConsultation, setActiveConsultation] = useState(null);
   const [consultationForm, setConsultationForm] = useState({
     diagnosis: "",
@@ -131,7 +130,7 @@ function DoctorDashboard({ appointments, onStatusUpdate }) {
       });
       setActiveConsultation(null);
       setConsultationForm({ diagnosis: "", treatment: "", notes: "", medicines: [{ name: "", dosage: "", duration: "" }], followUpDate: "" });
-      onStatusUpdate();
+      onRefresh();
     } catch (err) {
       alert(err.message);
     }
@@ -194,7 +193,7 @@ function DoctorDashboard({ appointments, onStatusUpdate }) {
                   <input
                     name="diagnosis" required placeholder="e.g. Acute Viral Fever"
                     value={consultationForm.diagnosis} onChange={handleConsultationChange}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
                 <div>
@@ -202,7 +201,7 @@ function DoctorDashboard({ appointments, onStatusUpdate }) {
                   <input
                     type="date" name="followUpDate"
                     value={consultationForm.followUpDate} onChange={handleConsultationChange}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark] focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
               </div>
@@ -212,7 +211,7 @@ function DoctorDashboard({ appointments, onStatusUpdate }) {
                 <textarea
                   name="treatment" rows={2} placeholder="Summary of treatment provided..."
                   value={consultationForm.treatment} onChange={handleConsultationChange}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
                 />
               </div>
 
@@ -227,17 +226,17 @@ function DoctorDashboard({ appointments, onStatusUpdate }) {
                       <input
                         placeholder="Medicine Name" value={med.name}
                         onChange={(e) => handleMedicineChange(idx, 'name', e.target.value)}
-                        className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg px-3 py-2 text-xs outline-none"
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                       <input
                         placeholder="Dosage (e.g. 1-0-1)" value={med.dosage}
                         onChange={(e) => handleMedicineChange(idx, 'dosage', e.target.value)}
-                        className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg px-3 py-2 text-xs outline-none"
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                       <input
                         placeholder="Duration (e.g. 5 days)" value={med.duration}
                         onChange={(e) => handleMedicineChange(idx, 'duration', e.target.value)}
-                        className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg px-3 py-2 text-xs outline-none"
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                     </div>
                   ))}
@@ -325,11 +324,10 @@ function AdminDashboard({ appointments }) {
                   </td>
                   <td className="py-4 px-5 text-slate-600 dark:text-slate-400">Dr. {appt.doctorId?.userId?.name}</td>
                   <td className="py-4 px-5">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                      appt.status === "Completed" ? "bg-emerald-100 text-emerald-600" :
-                      appt.status === "Cancelled" ? "bg-rose-100 text-rose-600" :
-                      "bg-amber-100 text-amber-600"
-                    }`}>{appt.status}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${appt.status === "Completed" ? "bg-emerald-100 text-emerald-600" :
+                        appt.status === "Cancelled" ? "bg-rose-100 text-rose-600" :
+                          "bg-amber-100 text-amber-600"
+                      }`}>{appt.status}</span>
                   </td>
                   <td className="py-4 px-5 font-mono text-slate-400">#{appt.tokenNumber}</td>
                 </tr>
@@ -397,7 +395,13 @@ export default function Dashboard() {
       </div>
 
       {user.role === "admin" && <AdminDashboard appointments={appointments} />}
-      {user.role === "doctor" && <DoctorDashboard appointments={appointments} onStatusUpdate={handleStatusUpdate} />}
+      {user.role === "doctor" && (
+        <DoctorDashboard
+          appointments={appointments}
+          onStatusUpdate={handleStatusUpdate}
+          onRefresh={loadData}
+        />
+      )}
       {user.role === "patient" && <PatientDashboard appointments={appointments} />}
     </div>
   );

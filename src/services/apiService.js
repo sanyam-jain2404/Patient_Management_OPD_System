@@ -115,6 +115,11 @@ export const fetchApiPatientById = async (id) => {
   return await apiRequest(`/patients/${id}`);
 };
 
+// Fetch logged-in patient's own profile
+export const fetchMyPatientProfile = async () => {
+  return await apiRequest("/patients/me");
+};
+
 export const updateApiPatient = async (id, patientData) => {
   return await apiRequest(`/patients/${id}`, "PUT", patientData);
 };
