@@ -41,6 +41,32 @@ const doctorSchema = new mongoose.Schema(
             default: true,
             index: true
         },
+        // Weekly working hours. dayOfWeek: Sunday=0 ... Saturday=6.
+        // An empty schedule preserves the legacy isAvailable-only behaviour.
+        weeklySchedule: {
+            type: [{
+                _id: false,
+                dayOfWeek: { type: Number, required: true, min: 0, max: 6 },
+                isWorking: { type: Boolean, default: true },
+                startTime: { type: String, default: "09:00" },
+                endTime: { type: String, default: "17:00" },
+                breakStart: { type: String, default: "13:00" },
+                breakEnd: { type: String, default: "14:00" }
+            }],
+            default: []
+        },
+        // Date-specific leave or special working hours (YYYY-MM-DD).
+        availabilityExceptions: {
+            type: [{
+                _id: false,
+                date: { type: String, required: true },
+                isAvailable: { type: Boolean, required: true },
+                startTime: { type: String },
+                endTime: { type: String },
+                reason: { type: String, trim: true, maxlength: 200 }
+            }],
+            default: []
+        },
         // Cached workload for fast allocation decisions
         activePatientCount: {
             type: Number,

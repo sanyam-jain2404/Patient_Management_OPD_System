@@ -73,7 +73,31 @@ export async function estimateWaitingTime(doctorId, date, avgMinutes) {
  * Fetch all verified, available doctors for a department, with their
  * user details populated. Internal helper.
  */
-async function getAvailableDoctors(departmentId) {
+/** Check whether a doctor can accept an appointment at the requested local date/time. */
+export function isDoctorAvailableAt(doctor, date, time) {
+    if (!doctor.isAvailable) return false;
+    // Keep compatibility for existing doctors who have not configured a schedule yet.
+    if (!Array.isArray(doctor.weeklySchedule) || doctor.weeklySchedule.length === 0) return true;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "") || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time || "")) return false;
+
+    const dayOfWeek = new Date(`${date}T00:00:00.000Z`).getUTCDay();
+    const exception = (doctor.availabilityExceptions || []).find(item => item.date === date);
+    let hours;
+    if (exception) {
+        if (!exception.isAvailable) return false;
+        hours = { startTime: exception.startTime, endTime: exception.endTime };
+    } else {
+        hours = doctor.weeklySchedule.find(item => item.dayOfWeek === dayOfWeek);
+        if (!hours || !hours.isWorking) return false;
+    }
+
+    if (!hours.startTime || !hours.endTime || time < hours.startTime || time >= hours.endTime) return false;
+    // Breaks apply to the weekly schedule, not special-date opening hours.
+    if (!exception && hours.breakStart && hours.breakEnd && time >= hours.breakStart && time < hours.breakEnd) return false;
+    return true;
+}
+
+async function getAvailableDoctors(departmentId, date, time) {
     const verifiedUsers = await User.find({
         role: "doctor",
         isVerified: true
@@ -119,6 +143,11 @@ async function getAvailableDoctors(departmentId) {
         }
     }
 
+    // Only apply time-based filtering when an appointment time is supplied.
+    if (date && time) {
+        doctors = doctors.filter(doctor => isDoctorAvailableAt(doctor, date, time));
+    }
+
     return doctors.sort((a, b) => (a.specialization || "").localeCompare(b.specialization || ""));
 }
 
@@ -126,8 +155,8 @@ async function getAvailableDoctors(departmentId) {
  * Find the best doctor for a department/category.
  * Returns { doctor, workload, estimatedWaitMinutes, doctorName } or null if none available.
  */
-export async function findBestDoctor(departmentId, date) {
-    const doctors = await getAvailableDoctors(departmentId);
+export async function findBestDoctor(departmentId, date, time) {
+    const doctors = await getAvailableDoctors(departmentId, date, time);
     if (doctors.length === 0) return null;
 
     const candidates = await Promise.all(
@@ -174,12 +203,12 @@ export async function allocateAppointment(data) {
         session.startTransaction();
 
         // 1. Find best doctor
-        const best = await findBestDoctor(departmentId, date);
+        const best = await findBestDoctor(departmentId, date, time);
         if (!best) {
             await session.abortTransaction();
             return {
                 success: false,
-                message: "No available doctor found for this department right now."
+                message: "No doctor is available for this department at the selected date and time."
             };
         }
 
