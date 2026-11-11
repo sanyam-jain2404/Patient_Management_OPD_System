@@ -1,23 +1,54 @@
+
 import express from "express";
+import mongoose from "mongoose";
+
 import Appointment from "../models/Appointment.js";
 import Department from "../models/Department.js";
 import Doctor from "../models/Doctor.js";
+import Patient from "../models/Patient.js";
+import FollowUp from "../models/FollowUp.js";
+import Consultation from "../models/Consultation.js";
+
 import { allocateAppointment } from "../services/allocationService.js";
+import { recalculateDoctorQueue } from "../services/queueService.js";
+
 import protect from "../middleware/authMiddleware.js";
 import authorizeRoles from "../middleware/authorizeRoles.js";
-import { recalculateDoctorQueue } from "../services/queueService.js";
-import mongoose from "mongoose";
 
 const router = express.Router();
 
-/**
- * POST /api/appointments
- * Patient or Admin books an appointment.
- * Automatically runs Smart Doctor Allocation based on department.
- */
+
+/* =====================================================
+   1. BOOK APPOINTMENT
+   POST /api/appointments
+
+   Patient: Books own appointment
+   Admin: Books appointment for a patient
+
+   Supports:
+   - Normal appointment
+   - Follow-up appointment
+   ===================================================== */
+
 router.post("/", protect, async (req, res) => {
     try {
-        const { departmentId, date, time, symptoms, reason, priority, patientId: targetPatientId } = req.body;
+        const {
+            departmentId,
+            date,
+            time,
+            symptoms,
+            reason,
+            priority,
+            patientId: targetPatientId,
+            followUpId
+        } = req.body;
+
+        if (!["patient", "admin"].includes(req.user.role)) {
+            return res.status(403).json({
+                success: false,
+                message: "You are not authorized to book appointments."
+            });
+        }
 
         if (!departmentId || !date || !time) {
             return res.status(400).json({
@@ -26,14 +57,38 @@ router.post("/", protect, async (req, res) => {
             });
         }
 
-        if (!mongoose.isValidObjectId(departmentId)) {
+        if (
+            !mongoose.isValidObjectId(departmentId) ||
+            (targetPatientId &&
+                !mongoose.isValidObjectId(targetPatientId))
+        ) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid department ID."
+                message: "Invalid department or patient ID."
+            });
+        }
+
+        if (
+            !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+            new Date(`${date}T00:00:00.000Z`)
+                .toISOString()
+                .slice(0, 10) !== date
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid appointment date."
+            });
+        }
+
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid appointment time."
             });
         }
 
         const department = await Department.findById(departmentId);
+
         if (!department || !department.isActive) {
             return res.status(404).json({
                 success: false,
@@ -41,36 +96,145 @@ router.post("/", protect, async (req, res) => {
             });
         }
 
-        // Determine patientId: if admin/receptionist is booking for a patient, use targetPatientId;
-        // otherwise if patient is booking, use their associated patient record or user ID.
-        let patientId = targetPatientId;
+        let patientId;
+
+        // Patient booking for themselves
         if (req.user.role === "patient") {
-            // For patient role, check if user has a Patient document or use req.user.userId
-            const Patient = (await import("../models/Patient.js")).default;
-            let patientRecord = await Patient.findOne({
+            const patient = await Patient.findOne({
                 userId: req.user._id
             });
-            if (!patientRecord) {
-                // Create a basic patient profile for this user if not exists
-                patientRecord = await Patient.create({
-                    userId: req.user._id,
-                    name: req.user.name,
-                    age: req.user.age || 30, // default placeholder from user profile
-                    gender: req.user.gender || "Other",
-                    phone: req.user.phone || "9999999999"
+
+            if (!patient) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Patient profile not found."
                 });
             }
-            patientId = patientRecord._id;
+
+            patientId = patient._id;
         }
 
-        if (!patientId || !mongoose.isValidObjectId(patientId)) {
-            return res.status(400).json({
-                success: false,
-                message: "Valid patient ID is required for booking."
+        // Admin booking for another patient
+        else {
+            if (!targetPatientId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Patient ID is required for admin booking."
+                });
+            }
+
+            const patient = await Patient.findById(targetPatientId);
+
+            if (!patient) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Patient not found."
+                });
+            }
+
+            patientId = patient._id;
+        }
+
+        let followUp = null;
+        let followUpOf = null;
+        let preferredDoctorId = null;
+
+        // Follow-up validation
+        if (followUpId) {
+            if (!mongoose.isValidObjectId(followUpId)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid follow-up ID."
+                });
+            }
+
+            followUp = await FollowUp.findById(followUpId);
+
+            if (!followUp) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Follow-up record not found."
+                });
+            }
+
+            // Verify patient ownership
+            if (
+                followUp.patientId.toString() !==
+                patientId.toString()
+            ) {
+                return res.status(403).json({
+                    success: false,
+                    message: "This follow-up does not belong to this patient."
+                });
+            }
+
+            // Prevent duplicate booking
+            if (
+                followUp.appointmentId ||
+                !["Pending", "Reminder Sent"].includes(followUp.status)
+            ) {
+                return res.status(409).json({
+                    success: false,
+                    message: "This follow-up has already been booked or cannot be booked."
+                });
+            }
+
+            const consultation = await Consultation.findById(
+                followUp.consultationId
+            );
+
+            if (!consultation) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Original consultation not found."
+                });
+            }
+
+            if (
+                consultation.patientId.toString() !==
+                patientId.toString()
+            ) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Consultation does not belong to this patient."
+                });
+            }
+
+            followUpOf = consultation.appointmentId;
+            preferredDoctorId = followUp.doctorId;
+
+            if (!followUpOf) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Original appointment reference not found."
+                });
+            }
+
+            // Same department as original consultation
+            if (
+                consultation.departmentId.toString() !==
+                departmentId.toString()
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Please select the original consultation department."
+                });
+            }
+
+            // Check existing follow-up appointment
+            const existingAppointment = await Appointment.findOne({
+                followUpId: followUp._id
             });
+
+            if (existingAppointment) {
+                return res.status(409).json({
+                    success: false,
+                    message: "An appointment has already been booked for this follow-up."
+                });
+            }
         }
 
-        // Run smart allocation
+        // Smart doctor allocation
         const result = await allocateAppointment({
             patientId,
             departmentId,
@@ -78,7 +242,10 @@ router.post("/", protect, async (req, res) => {
             time,
             symptoms,
             reason,
-            priority
+            priority,
+            followUpOf,
+            followUpId: followUp?._id || null,
+            preferredDoctorId
         });
 
         if (!result.success) {
@@ -88,35 +255,86 @@ router.post("/", protect, async (req, res) => {
             });
         }
 
-        res.status(201).json({
+        // Link appointment with FollowUp
+        if (followUp) {
+            const updatedFollowUp =
+                await FollowUp.findOneAndUpdate(
+                    {
+                        _id: followUp._id,
+                        status: {
+                            $in: ["Pending", "Reminder Sent"]
+                        },
+                        appointmentId: null
+                    },
+                    {
+                        $set: {
+                            appointmentId: result.appointment._id,
+                            status: "Appointment Booked"
+                        }
+                    },
+                    {
+                        new: true
+                    }
+                );
+
+            // If another request already booked it
+            if (!updatedFollowUp) {
+                await Appointment.deleteOne({
+                    _id: result.appointment._id
+                });
+
+                return res.status(409).json({
+                    success: false,
+                    message: "This follow-up has already been booked."
+                });
+            }
+        }
+
+        return res.status(201).json({
             success: true,
-            message: `Appointment booked successfully! Assigned to Dr. ${result.doctor.name} (Token #${result.tokenNumber})`,
+            message: followUp
+                ? "Follow-up appointment booked successfully!"
+                : `Appointment booked successfully! Assigned to Dr. ${result.doctor.name} (Token #${result.tokenNumber})`,
             data: {
                 appointment: result.appointment,
                 assignedDoctor: result.doctor,
                 tokenNumber: result.tokenNumber,
-                estimatedWaitMinutes: result.estimatedWaitMinutes
+                estimatedWaitMinutes: result.estimatedWaitMinutes,
+                isFollowUp: Boolean(followUp)
             }
         });
+
     } catch (error) {
-        console.error("Appointment booking error:", error.message);
-        res.status(500).json({
+        console.error("Appointment booking error:", error);
+
+        if (error.code === 11000) {
+            return res.status(409).json({
+                success: false,
+                message: "This follow-up appointment has already been booked."
+            });
+        }
+
+        return res.status(500).json({
             success: false,
             message: "Unable to book appointment: " + error.message
         });
     }
 });
 
-/**
- * GET /api/appointments
- * View appointments based on role:
- * - Patient: sees their own appointments
- * - Doctor: sees appointments assigned to them
- * - Admin: sees all appointments
- */
+
+/* =====================================================
+   2. GET APPOINTMENTS
+   GET /api/appointments
+
+   Patient: Own appointments
+   Doctor: Assigned appointments
+   Admin: All appointments
+   ===================================================== */
+
 router.get("/", protect, async (req, res) => {
     try {
         let query = {};
+
         const { date, status, departmentId } = req.query;
 
         if (date) query.appointmentDate = date;
@@ -124,50 +342,80 @@ router.get("/", protect, async (req, res) => {
         if (departmentId) query.departmentId = departmentId;
 
         if (req.user.role === "patient") {
-            const Patient = (await import("../models/Patient.js")).default;
-            const patientRecord = await Patient.findOne({
+            const patient = await Patient.findOne({
                 userId: req.user._id
             });
-            if (!patientRecord) {
-                return res.status(200).json({ success: true, count: 0, data: [] });
+
+            if (!patient) {
+                return res.status(200).json({
+                    success: true,
+                    count: 0,
+                    data: []
+                });
             }
-            query.patientId = patientRecord._id;
+
+            query.patientId = patient._id;
+
         } else if (req.user.role === "doctor") {
-            // Find Doctor record for this user
-            const doctorRecord = await Doctor.findOne({ userId: req.user._id });
-            if (!doctorRecord) {
-                return res.status(200).json({ success: true, count: 0, data: [] });
+            const doctor = await Doctor.findOne({
+                userId: req.user._id
+            });
+
+            if (!doctor) {
+                return res.status(200).json({
+                    success: true,
+                    count: 0,
+                    data: []
+                });
             }
-            query.doctorId = doctorRecord._id;
+
+            query.doctorId = doctor._id;
+
+        } else if (req.user.role !== "admin") {
+            return res.status(403).json({
+                success: false,
+                message: "Access denied."
+            });
         }
 
         const appointments = await Appointment.find(query)
             .populate("patientId", "name age gender phone blood")
             .populate({
                 path: "doctorId",
-                populate: { path: "userId", select: "name email" }
+                populate: {
+                    path: "userId",
+                    select: "name email"
+                }
             })
             .populate("departmentId", "name")
-            .sort({ appointmentDate: 1, tokenNumber: 1 });
+            .sort({
+                appointmentDate: 1,
+                tokenNumber: 1
+            });
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             count: appointments.length,
             data: appointments
         });
+
     } catch (error) {
         console.error("Fetch appointments error:", error.message);
-        res.status(500).json({
+
+        return res.status(500).json({
             success: false,
-            message: "Unable to fetch appointments"
+            message: "Unable to fetch appointments."
         });
     }
 });
 
-/**
- * POST /api/appointments/call-next
- * Doctor calls the next patient from their queue.
- */
+
+/* =====================================================
+   3. CALL NEXT PATIENT
+   POST /api/appointments/call-next
+
+   Doctor calls the next patient.
+   ===================================================== */
 
 router.post(
     "/call-next",
@@ -286,7 +534,6 @@ router.post(
                     );
                 }
 
-                // Save details for ETA recalculation
                 calledDoctorId = doctor._id;
                 calledAppointmentDate = date;
 
@@ -300,7 +547,6 @@ router.post(
                 };
             });
 
-            // Recalculate queue after transaction commits
             if (result?.status === 200) {
                 try {
                     await recalculateDoctorQueue(
@@ -332,7 +578,14 @@ router.post(
 );
 
 
+/* =====================================================
+   4. UPDATE APPOINTMENT STATUS
+   PATCH /api/appointments/:id/status
 
+   Patient: Cancel own appointment
+   Doctor: Update own appointment
+   Admin: Manage appointments
+   ===================================================== */
 
 router.patch(
     "/:id/status",
@@ -367,10 +620,6 @@ router.patch(
                         message: "Patients can only cancel appointments."
                     });
                 }
-
-                const Patient = (
-                    await import("../models/Patient.js")
-                ).default;
 
                 const patient = await Patient.findOne({
                     userId: req.user._id
@@ -408,7 +657,7 @@ router.patch(
 
             const currentStatus = appointment.status;
 
-            // Only Booked or Waiting appointments can be cancelled
+            // Cancellation
             if (status === "Cancelled") {
                 if (!["Booked", "Waiting"].includes(currentStatus)) {
                     return res.status(409).json({
@@ -419,6 +668,7 @@ router.patch(
 
                 appointment.status = "Cancelled";
                 appointment.cancelledAt = new Date();
+
                 appointment.cancelReason =
                     cancelReason?.trim() ||
                     (
@@ -428,7 +678,7 @@ router.patch(
                     );
             }
 
-            // Admin and Doctor can move Booked to Waiting
+            // Move Booked to Waiting
             else if (
                 status === "Waiting" &&
                 req.user.role !== "patient" &&
@@ -437,7 +687,7 @@ router.patch(
                 appointment.status = "Waiting";
             }
 
-            // Admin and Doctor can mark Booked/Waiting as No Show
+            // Mark No Show
             else if (
                 status === "No Show" &&
                 req.user.role !== "patient" &&
@@ -454,9 +704,35 @@ router.patch(
                 });
             }
 
+            // Release FollowUp reference when appointment is cancelled
+            if (appointment.followUpId) {
+                appointment.followUpId = null;
+            }
             await appointment.save();
 
-            // Recalculate queue after status change
+            // If a follow-up appointment is cancelled,
+            // allow the patient to book it again.
+            if (
+                appointment.followUpOf &&
+                appointment.status === "Cancelled"
+            ) {
+                await FollowUp.findOneAndUpdate(
+                    {
+                        appointmentId: appointment._id,
+                        status: "Appointment Booked"
+                    },
+                    {
+                        $set: {
+                            status: "Pending"
+                        },
+                        $unset: {
+                            appointmentId: 1
+                        }
+                    }
+                );
+            }
+
+            // Recalculate queue
             try {
                 await recalculateDoctorQueue(
                     appointment.doctorId,
@@ -487,21 +763,22 @@ router.patch(
 );
 
 
+/* =====================================================
+   5. GET QUEUE
+   GET /api/appointments/queue?date=YYYY-MM-DD
 
-/**
- * GET /api/appointments/queue?date=YYYY-MM-DD
- *
- * Doctor: apni queue
- * Admin: all doctors, optionally filter by doctorId
- * Patient: apne appointment ki queue position
- */
+   Doctor: Own queue
+   Admin: All doctors or selected doctor
+   Patient: Own appointment queue position
+   ===================================================== */
 
 router.get("/queue", protect, async (req, res) => {
     try {
         const { date, doctorId } = req.query;
 
         const queueDate =
-            date || new Date().toLocaleDateString("en-CA", {
+            date ||
+            new Date().toLocaleDateString("en-CA", {
                 timeZone: "Asia/Kolkata"
             });
 
@@ -537,6 +814,7 @@ router.get("/queue", protect, async (req, res) => {
             }
 
             query.doctorId = doctor._id;
+
         } else if (req.user.role === "admin") {
             if (doctorId) {
                 if (!mongoose.isValidObjectId(doctorId)) {
@@ -548,11 +826,8 @@ router.get("/queue", protect, async (req, res) => {
 
                 query.doctorId = doctorId;
             }
-        } else if (req.user.role === "patient") {
-            const Patient = (
-                await import("../models/Patient.js")
-            ).default;
 
+        } else if (req.user.role === "patient") {
             const patient = await Patient.findOne({
                 userId: req.user._id
             });
@@ -566,6 +841,7 @@ router.get("/queue", protect, async (req, res) => {
             }
 
             query.patientId = patient._id;
+
         } else {
             return res.status(403).json({
                 success: false,
@@ -573,11 +849,9 @@ router.get("/queue", protect, async (req, res) => {
             });
         }
 
-        // Find the relevant doctors' appointments.
-        // For patients, calculate positions using the full doctor queue,
-        // not only the patient's own appointments.
-
-        let appointments = await Appointment.find(
+        // For patients, calculate queue using the complete
+        // queue of doctors assigned to their appointments.
+        const appointments = await Appointment.find(
             req.user.role === "patient"
                 ? {
                     appointmentDate: queueDate,
@@ -626,21 +900,21 @@ router.get("/queue", protect, async (req, res) => {
                 10;
 
             items.sort((a, b) => {
-                // Already running consultation stays first.
+                // Current consultation stays first
                 if (a.status === "In Consultation") return -1;
                 if (b.status === "In Consultation") return 1;
 
-                // Emergency patients ahead of normal patients.
+                // Emergency patients first
                 if (a.priority !== b.priority) {
                     return a.priority === "Emergency" ? -1 : 1;
                 }
 
-                // FIFO within the same priority.
+                // FIFO
                 return a.tokenNumber - b.tokenNumber;
             });
 
             const running = items.find(
-                a => a.status === "In Consultation"
+                item => item.status === "In Consultation"
             );
 
             let remainingMinutes = 0;
@@ -706,7 +980,7 @@ router.get("/queue", protect, async (req, res) => {
             )
             : queueResults;
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             date: queueDate,
             count: data.length,
@@ -716,10 +990,12 @@ router.get("/queue", protect, async (req, res) => {
     } catch (error) {
         console.error("Queue error:", error);
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: "Unable to fetch waiting queue."
         });
     }
 });
+
+
 export default router;
