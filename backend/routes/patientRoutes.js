@@ -5,6 +5,8 @@ import authorizeRoles from "../middleware/authorizeRoles.js";
 import mongoose from "mongoose";
 import Appointment from "../models/Appointment.js";
 import Doctor from "../models/Doctor.js";
+import Consultation from "../models/Consultation.js";
+import Discharge from "../models/Discharge.js";
 
 
 const router = express.Router();
@@ -39,6 +41,145 @@ router.get(
         }
     }
 );
+
+
+router.get(
+    "/doctor",
+    protect,
+    authorizeRoles("doctor"),
+    async (req, res) => {
+        try {
+            const doctor = await Doctor.findOne({
+                userId: req.user._id
+            });
+
+            if (!doctor) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Doctor profile not found"
+                });
+            }
+
+            const appointments = await Appointment.find({
+                doctorId: doctor._id
+            })
+                .populate("patientId", "name age gender phone address")
+                .populate("departmentId", "name")
+                .populate({
+                    path: "doctorId",
+                    populate: {
+                        path: "userId",
+                        select: "name"
+                    }
+                })
+                .sort({ bookedAt: -1 });
+
+            const appointmentIds = appointments.map(a => a._id);
+
+            // Find appointments with saved consultations
+            const consultationIds = await Consultation.distinct(
+                "appointmentId",
+                {
+                    appointmentId: { $in: appointmentIds },
+                    isDeleted: { $ne: true }
+                }
+            );
+
+            // Find appointments already discharged
+            const dischargedIds = await Discharge.distinct(
+                "appointmentId",
+                {
+                    appointmentId: { $in: appointmentIds }
+                }
+            );
+
+            const consultationSet = new Set(
+                consultationIds.map(id => id.toString())
+            );
+
+            const dischargedSet = new Set(
+                dischargedIds.map(id => id.toString())
+            );
+
+            // Keep only one entry per patient
+            const uniquePatients = new Map();
+
+            appointments.forEach((appointment) => {
+                const patient = appointment.patientId;
+
+                if (!patient) return;
+
+                const patientId = patient._id.toString();
+                const appointmentId = appointment._id.toString();
+
+                // Latest appointment determines whether
+                // discharge button should be visible
+                const canDischarge =
+                    consultationSet.has(appointmentId) &&
+                    !dischargedSet.has(appointmentId) &&
+                    !["Cancelled", "No Show", "Discharged"].includes(
+                        appointment.status
+                    );
+
+                if (!uniquePatients.has(patientId)) {
+                    uniquePatients.set(patientId, {
+                        id: patientId,
+                        _id: patient._id,
+                        name: patient.name,
+                        age: patient.age,
+                        gender: patient.gender,
+                        phone: patient.phone,
+                        contact: patient.phone,
+                        address: patient.address,
+
+                        disease:
+                            appointment.reason ||
+                            appointment.symptoms ||
+                            "—",
+
+                        doctor:
+                            appointment.doctorId?.userId?.name ||
+                            "Doctor",
+
+                        // NEW PROPERTY
+                        department:
+                            appointment.departmentId?.name ||
+                            "Unknown Department",
+
+                        date: appointment.appointmentDate,
+
+                        priority:
+                            appointment.priority === "Emergency"
+                                ? "Critical"
+                                : "Low",
+
+                        appointmentId,
+                        appointmentStatus: appointment.status,
+                        canDischarge
+                    });
+                }
+            });
+
+            const patients = Array.from(uniquePatients.values());
+
+            return res.status(200).json({
+                success: true,
+                count: patients.length,
+                data: patients
+            });
+
+        } catch (error) {
+            console.error("Doctor patients error:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Unable to fetch doctor patients"
+            });
+        }
+    }
+);
+
+
 // Get a specific patient's profile
 router.get(
     "/:id",
@@ -106,51 +247,7 @@ router.get(
         }
     }
 );
-// Get patients assigned to the logged-in doctor
-router.get(
-    "/doctor",
-    protect,
-    authorizeRoles("doctor"),
-    async (req, res) => {
-        try {
-            const doctor = await Doctor.findOne({
-                userId: req.user._id
-            });
 
-            if (!doctor) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Doctor profile not found"
-                });
-            }
-
-            // Find all patients who have appointments
-            // assigned to this doctor (including completed ones)
-            const patientIds = await Appointment.distinct(
-                "patientId",
-                { doctorId: doctor._id }
-            );
-
-            const patients = await Patient.find({
-                _id: { $in: patientIds }
-            }).sort({ createdAt: -1 });
-
-            return res.status(200).json({
-                success: true,
-                count: patients.length,
-                data: patients
-            });
-
-        } catch (error) {
-            console.error("Doctor patients error:", error.message);
-
-            return res.status(500).json({
-                success: false,
-                message: "Unable to fetch doctor patients"
-            });
-        }
-    }
-);
 router.get(
     "/",
     protect,

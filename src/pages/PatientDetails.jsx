@@ -170,6 +170,58 @@ export default function PatientDetails() {
         </div>
       )}
 
+      {/* Treatment History */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+        <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-4">
+          🩺 Treatment History
+        </h2>
+
+        {treatmentHistory.length === 0 ? (
+          <p className="text-sm text-slate-400">
+            No treatment history available yet.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {treatmentHistory.map((item) => (
+              <div
+                key={item._id}
+                className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2"
+              >
+                <div className="flex justify-between flex-wrap gap-2">
+                  <p className="font-bold text-indigo-600 dark:text-indigo-400">
+                    {item.diagnosis}
+                  </p>
+                  <span className="text-xs text-slate-400">
+                    {new Date(item.consultationDate).toLocaleDateString()}
+                  </span>
+                </div>
+
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  <strong>Treatment:</strong> {item.treatment || "—"}
+                </p>
+
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  <strong>Medicines:</strong>{" "}
+                  {item.medicines?.length
+                    ? item.medicines.map(m => `${m.name} (${m.dosage || "—"})`).join(", ")
+                    : "—"}
+                </p>
+
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  <strong>Doctor Notes:</strong> {item.notes || "—"}
+                </p>
+
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  <strong>Follow-up:</strong>{" "}
+                  {item.followUpRecommendation || "Not required"}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+
       {/* Actions */}
       <div className="flex gap-3">
         <button

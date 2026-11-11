@@ -2,49 +2,55 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useToast } from "../components/Toast";
 import { PRESCRIPTIONS } from "../data/prescriptions";
+import { fetchApiPatientById, createDischarge } from "../services/apiService";
+
 
 const inputCls = "w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none transition-all";
 
 export default function LeavePatient() {
-  const { id }   = useParams();
+  const { id } = useParams();
   const navigate = useNavigate();
-  const toast    = useToast();
+  const toast = useToast();
 
-  const [patient,      setPatient]      = useState(null);
-  const [confirm,      setConfirm]      = useState(false);
-  const [loading,      setLoading]      = useState(false);
-  const [discharged,   setDischarged]   = useState(false);
+  const [patient, setPatient] = useState(null);
+  const [confirm, setConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [discharged, setDischarged] = useState(false);
   const [dischargedPt, setDischargedPt] = useState(null);
 
   // Vitals
-  const [bp,       setBp]       = useState("");
-  const [temp,     setTemp]     = useState("");
-  const [pulse,    setPulse]    = useState("");
-  const [weight,   setWeight]   = useState("");
+  const [bp, setBp] = useState("");
+  const [temp, setTemp] = useState("");
+  const [pulse, setPulse] = useState("");
+  const [weight, setWeight] = useState("");
 
   // Prescription
-  const [selDisease,    setSelDisease]    = useState("");
-  const [prescription,  setPrescription]  = useState("");
+  const [selDisease, setSelDisease] = useState("");
+  const [prescription, setPrescription] = useState("");
 
   // Doctor notes
   const [doctorNotes, setDoctorNotes] = useState("");
 
   useEffect(() => {
-    const api   = JSON.parse(localStorage.getItem("apiPatients")) || [];
-    const local = JSON.parse(localStorage.getItem("patients"))    || [];
-    const found = [...api, ...local].find(p => p.id === Number(id));
-    setPatient(found || null);
-    if (found?.disease) {
-      // Auto-match prescription if disease exists
-      const match = PRESCRIPTIONS.find(
-        pr => pr.disease.toLowerCase().includes(found.disease.toLowerCase()) ||
-              found.disease.toLowerCase().includes(pr.disease.toLowerCase())
-      );
-      if (match) {
-        setSelDisease(match.disease);
-        setPrescription(match.prescription);
+    const loadPatient = async () => {
+      try {
+        const result = await fetchApiPatientById(id);
+        const p = result.data;
+
+        setPatient({
+          ...p,
+          id: p._id,
+          contact: p.phone,
+          blood: p.bloodGroup,
+          disease: "—",
+          doctor: "Assigned Doctor"
+        });
+      } catch (error) {
+        toast(error.message, "error");
       }
-    }
+    };
+
+    loadPatient();
   }, [id]);
 
   // When disease is selected, auto-fill prescription
@@ -55,44 +61,35 @@ export default function LeavePatient() {
   };
 
   const handleDischarge = async () => {
-    setLoading(true);
-    await new Promise(r => setTimeout(r, 600));
+    if (discharged || loading) return;
+    try {
+      setLoading(true);
 
-    let api        = JSON.parse(localStorage.getItem("apiPatients")) || [];
-    let local      = JSON.parse(localStorage.getItem("patients"))    || [];
-    let dischargedList = JSON.parse(localStorage.getItem("discharged")) || [];
+      const result = await createDischarge(id, {
+        vitals: { bp, temp, pulse, weight },
+        prescribedDisease: selDisease,
+        prescription,
+        dischargeNotes: doctorNotes
+      });
 
-    let p = null;
-    if (api.find(x => x.id === Number(id))) {
-      p   = api.find(x => x.id === Number(id));
-      api = api.filter(x => x.id !== Number(id));
-      localStorage.setItem("apiPatients", JSON.stringify(api));
-    } else if (local.find(x => x.id === Number(id))) {
-      p     = local.find(x => x.id === Number(id));
-      local = local.filter(x => x.id !== Number(id));
-      localStorage.setItem("patients", JSON.stringify(local));
+      const record = {
+        ...patient,
+        status: "Discharged",
+        dischargeDate: new Date().toLocaleDateString(),
+        dischargeNotes: doctorNotes,
+        vitals: { bp, temp, pulse, weight },
+        prescribedDisease: selDisease,
+        prescription
+      };
+
+      toast(result.message, "success");
+      setDischargedPt(record);
+      setDischarged(true);
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      setLoading(false);
     }
-
-    if (!p) { toast("Patient not found.", "error"); setLoading(false); return; }
-
-    const record = {
-      ...p,
-      status:        "Discharged",
-      dischargeDate: new Date().toISOString().slice(0, 10),
-      dischargeNotes: doctorNotes,
-      vitals: { bp, temp, pulse, weight },
-      prescribedDisease: selDisease,
-      prescription,
-    };
-
-    dischargedList.push(record);
-    localStorage.setItem("discharged", JSON.stringify(dischargedList));
-    window.dispatchEvent(new Event("storage"));
-
-    toast(`${p.name} discharged successfully.`, "success");
-    setDischargedPt(record);
-    setDischarged(true);
-    setLoading(false);
   };
 
   const handlePrint = () => {
@@ -273,9 +270,9 @@ export default function LeavePatient() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
           {[
-            { k: "Age",      v: `${patient.age} yrs` },
-            { k: "Blood",    v: patient.blood || "—" },
-            { k: "Contact",  v: patient.contact },
+            { k: "Age", v: `${patient.age} yrs` },
+            { k: "Blood", v: patient.blood || "—" },
+            { k: "Contact", v: patient.contact },
             { k: "Admitted", v: patient.date || "—" },
           ].map(({ k, v }) => (
             <div key={k} className="bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3">
@@ -294,9 +291,9 @@ export default function LeavePatient() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "Blood Pressure", placeholder: "e.g. 120/80", value: bp, onChange: setBp, icon: "🩺" },
-            { label: "Temperature",    placeholder: "e.g. 98.6°F",  value: temp, onChange: setTemp, icon: "🌡️" },
-            { label: "Pulse Rate",     placeholder: "e.g. 72 bpm",  value: pulse, onChange: setPulse, icon: "💓" },
-            { label: "Weight",         placeholder: "e.g. 68 kg",   value: weight, onChange: setWeight, icon: "⚖️" },
+            { label: "Temperature", placeholder: "e.g. 98.6°F", value: temp, onChange: setTemp, icon: "🌡️" },
+            { label: "Pulse Rate", placeholder: "e.g. 72 bpm", value: pulse, onChange: setPulse, icon: "💓" },
+            { label: "Weight", placeholder: "e.g. 68 kg", value: weight, onChange: setWeight, icon: "⚖️" },
           ].map(f => (
             <div key={f.label}>
               <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">{f.icon} {f.label}</label>
@@ -368,7 +365,7 @@ export default function LeavePatient() {
         </button>
         <button
           onClick={handleDischarge}
-          disabled={!confirm || loading}
+          disabled={loading || discharged}
           className="flex-1 py-3 rounded-xl text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed shadow hover:shadow-rose-500/30 hover:scale-105 active:scale-95 transition-all"
         >
           {loading ? (
@@ -379,7 +376,7 @@ export default function LeavePatient() {
               </svg>
               Processing...
             </span>
-          ) : "🚪 Confirm Discharge"}
+          ) : discharged ? "Already Discharged" : "🚪 Confirm Discharge"}
         </button>
       </div>
     </div>

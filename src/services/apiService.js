@@ -107,6 +107,10 @@ export const fetchApiPatients = async () => {
   return await apiRequest("/patients");
 };
 
+export const fetchDoctorPatients = async () => {
+  return await apiRequest("/patients/doctor");
+};
+
 export const createApiPatient = async (patientData) => {
   return await apiRequest("/patients", "POST", patientData);
 };
@@ -126,4 +130,17 @@ export const updateApiPatient = async (id, patientData) => {
 
 export const deleteApiPatient = async (id) => {
   return await apiRequest(`/patients/${id}`, "DELETE");
+};
+
+// Activity services
+export const fetchActivities = async () => {
+  return await apiRequest("/activities");
+};
+
+export const createDischarge = async (patientId, dischargeData) => {
+  return await apiRequest(`/discharges/${patientId}`, "POST", dischargeData);
+};
+
+export const fetchDischargedPatients = async () => {
+  return await apiRequest("/discharges");
 };

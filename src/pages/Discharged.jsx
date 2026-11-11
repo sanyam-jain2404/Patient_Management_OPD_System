@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom"; 
+import { fetchDischargedPatients } from "../services/apiService";
 
 function printSummary(p) {
   const win = window.open("", "_blank");
@@ -77,25 +78,51 @@ function printSummary(p) {
 }
 
 export default function Discharged() {
-  const [data,   setData]   = useState([]);
+  const [data, setData] = useState([]);
   const [search, setSearch] = useState("");
   const navigate = useNavigate();
 
-  const load = () => {
-    const d = JSON.parse(localStorage.getItem("discharged")) || [];
-    setData([...d].reverse());
+  const load = async () => {
+    try {
+      const result = await fetchDischargedPatients();
+
+      const records = (result.data || []).map((item) => {
+        const patient = item.patientId || {};
+        const doctor = item.doctorId || {};
+
+        return {
+          id: patient._id,
+          name: patient.name || "Unknown",
+          age: patient.age,
+          gender: patient.gender,
+          contact: patient.phone,
+          blood: patient.bloodGroup,
+          disease: item.prescribedDisease || "—",
+          doctor: doctor.userId?.name || "Assigned Doctor",
+          dischargeDate: item.dischargeDate
+            ? new Date(item.dischargeDate).toLocaleDateString()
+            : "—",
+          vitals: item.vitals,
+          prescribedDisease: item.prescribedDisease,
+          prescription: item.prescription,
+          dischargeNotes: item.dischargeNotes
+        };
+      });
+
+      setData(records);
+    } catch (error) {
+      console.error("Failed to load discharged patients:", error);
+    }
   };
 
   useEffect(() => {
     load();
-    window.addEventListener("storage", load);
-    return () => window.removeEventListener("storage", load);
   }, []);
 
   const filtered = data.filter(p =>
-    p.name?.toLowerCase().includes(search.toLowerCase()) ||
-    p.disease?.toLowerCase().includes(search.toLowerCase())
-  );
+  p.name?.toLowerCase().includes(search.toLowerCase()) ||
+  p.disease?.toLowerCase().includes(search.toLowerCase())
+);
 
   return (
     <div className="space-y-5 animate-fade-in">
