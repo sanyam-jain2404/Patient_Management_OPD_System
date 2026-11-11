@@ -5,15 +5,15 @@ import FollowUp from "../models/FollowUp.js";
 import Doctor from "../models/Doctor.js";
 import protect from "../middleware/authMiddleware.js";
 import authorizeRoles from "../middleware/authorizeRoles.js";
+import { recalculateDoctorQueue } from "../services/queueService.js";
 import mongoose from "mongoose";
 
 const router = express.Router();
 
-/**
- * POST /api/consultations
- * Doctor records a consultation, diagnosis, prescription, and optional follow-up.
- */
+
 router.post("/", protect, authorizeRoles("doctor"), async (req, res) => {
+    const session = await mongoose.startSession();
+
     try {
         const {
             appointmentId,
@@ -25,7 +25,8 @@ router.post("/", protect, authorizeRoles("doctor"), async (req, res) => {
             followUpDate
         } = req.body;
 
-        if (!appointmentId || !diagnosis) {
+        // Basic validation
+        if (!appointmentId || !diagnosis?.trim()) {
             return res.status(400).json({
                 success: false,
                 message: "Appointment ID and diagnosis are required."
@@ -39,75 +40,185 @@ router.post("/", protect, authorizeRoles("doctor"), async (req, res) => {
             });
         }
 
-        const appointment = await Appointment.findById(appointmentId);
-        if (!appointment) {
-            return res.status(404).json({
-                success: false,
-                message: "Appointment not found."
-            });
-        }
-
-        const doctorRecord = await Doctor.findOne({ userId: req.user._id });
-        if (!doctorRecord || appointment.doctorId.toString() !== doctorRecord._id.toString()) {
-            return res.status(403).json({
-                success: false,
-                message: "You are not authorized to record consultation for this appointment."
-            });
-        }
-
-        // Check if consultation already exists for this appointment
-        const existing = await Consultation.findOne({ appointmentId });
-        if (existing) {
+        if (medicines !== undefined && !Array.isArray(medicines)) {
             return res.status(400).json({
                 success: false,
-                message: "Consultation record already exists for this appointment."
+                message: "Medicines must be an array."
             });
         }
 
-        const consultation = await Consultation.create({
-            patientId: appointment.patientId,
-            doctorId: doctorRecord._id,
-            appointmentId: appointment._id,
-            departmentId: appointment.departmentId,
-            consultationDate: new Date(),
-            symptoms: appointment.symptoms,
-            diagnosis: diagnosis.trim(),
-            treatment: treatment?.trim() || "",
-            notes: notes?.trim() || "",
-            medicines: medicines || [],
-            followUpRecommendation: followUpRecommendation?.trim() || "",
-            followUpDate: followUpDate ? new Date(followUpDate) : undefined
-        });
+        const cleanMedicines = medicines || [];
 
-        // Mark appointment as Completed
-        appointment.status = "Completed";
-        appointment.consultationEndedAt = new Date();
-        await appointment.save();
+        for (const medicine of cleanMedicines) {
+            if (
+                !medicine ||
+                typeof medicine.name !== "string" ||
+                !medicine.name.trim()
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Every medicine must have a valid name."
+                });
+            }
+        }
 
-        // If follow-up date is provided, create a FollowUp reminder
+        let parsedFollowUpDate;
+
         if (followUpDate) {
-            await FollowUp.create({
-                patientId: appointment.patientId,
-                doctorId: doctorRecord._id,
-                consultationId: consultation._id,
-                instructions: followUpRecommendation || "Follow-up visit recommended",
-                dueDate: new Date(followUpDate)
+            parsedFollowUpDate = new Date(followUpDate);
+
+            if (
+                Number.isNaN(parsedFollowUpDate.getTime()) ||
+                parsedFollowUpDate <= new Date()
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Follow-up date must be a valid future date."
+                });
+            }
+        }
+
+        const doctorRecord = await Doctor.findOne({
+            userId: req.user._id
+        });
+
+        if (!doctorRecord) {
+            return res.status(404).json({
+                success: false,
+                message: "Doctor profile not found."
             });
         }
 
-        res.status(201).json({
+        let savedConsultation;
+        let completedDoctorId;
+        let completedAppointmentDate;
+
+        // Database transaction
+        await session.withTransaction(async () => {
+
+            const appointment = await Appointment.findOne({
+                _id: appointmentId,
+                doctorId: doctorRecord._id
+            }).session(session);
+
+            if (!appointment) {
+                const error = new Error(
+                    "Appointment not found or not assigned to you."
+                );
+                error.statusCode = 404;
+                throw error;
+            }
+
+            // Patient must already be called by the doctor
+            if (appointment.status !== "In Consultation") {
+                const error = new Error(
+                    "Patient must be in consultation before completing it."
+                );
+                error.statusCode = 409;
+                throw error;
+            }
+
+            const existing = await Consultation.findOne({
+                appointmentId
+            }).session(session);
+
+            if (existing) {
+                const error = new Error(
+                    "Consultation already exists for this appointment."
+                );
+                error.statusCode = 409;
+                throw error;
+            }
+
+            // Create consultation record
+            const [consultation] = await Consultation.create(
+                [{
+                    patientId: appointment.patientId,
+                    doctorId: doctorRecord._id,
+                    appointmentId: appointment._id,
+                    departmentId: appointment.departmentId,
+                    consultationDate: new Date(),
+                    symptoms: appointment.symptoms || "",
+                    diagnosis: diagnosis.trim(),
+                    treatment: treatment?.trim() || "",
+                    notes: notes?.trim() || "",
+                    medicines: cleanMedicines.map(medicine => ({
+                        name: medicine.name.trim(),
+                        dosage: medicine.dosage || "",
+                        duration: medicine.duration || "",
+                        frequency: medicine.frequency || "",
+                        instructions: medicine.instructions || ""
+                    })),
+                    followUpRecommendation:
+                        followUpRecommendation?.trim() || "",
+                    followUpDate: parsedFollowUpDate
+                }],
+                { session }
+            );
+
+            // Complete appointment
+            appointment.status = "Completed";
+            appointment.consultationEndedAt = new Date();
+
+            await appointment.save({ session });
+
+            // Save details for queue recalculation
+            completedDoctorId = appointment.doctorId;
+            completedAppointmentDate = appointment.appointmentDate;
+
+            // Create follow-up reminder if required
+            if (parsedFollowUpDate) {
+                await FollowUp.create(
+                    [{
+                        patientId: appointment.patientId,
+                        doctorId: doctorRecord._id,
+                        consultationId: consultation._id,
+                        instructions:
+                            followUpRecommendation?.trim() ||
+                            "Follow-up visit recommended",
+                        dueDate: parsedFollowUpDate
+                    }],
+                    { session }
+                );
+            }
+
+            savedConsultation = consultation;
+        });
+
+        // Recalculate queue after successful transaction
+        try {
+            await recalculateDoctorQueue(
+                completedDoctorId,
+                completedAppointmentDate
+            );
+        } catch (queueError) {
+            console.error(
+                "Queue recalculation failed:",
+                queueError.message
+            );
+        }
+
+        return res.status(201).json({
             success: true,
-            message: "Consultation and prescription recorded successfully",
-            data: consultation
+            message: "Consultation completed successfully.",
+            data: savedConsultation
         });
+
     } catch (error) {
-        console.error("Record consultation error:", error.message);
-        res.status(500).json({
+        console.error("Record consultation error:", error);
+
+        return res.status(error.statusCode || 500).json({
             success: false,
-            message: "Unable to record consultation: " + error.message
+            message: error.statusCode
+                ? error.message
+                : "Unable to record consultation."
         });
+
+    } finally {
+        await session.endSession();
     }
 });
+
 
 /**
  * GET /api/consultations/patient/:patientId
