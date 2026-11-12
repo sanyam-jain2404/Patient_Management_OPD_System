@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../components/Toast";
-import { fetchAppointments, updateAppointmentStatus, recordConsultation, callNextPatient } from "../services/apiService";
+import { fetchAppointments, updateAppointmentStatus, recordConsultation, callNextPatient, fetchPatientTreatmentHistory } from "../services/apiService";
 
 
 function StatCard({ title, value, icon, subtext, colorClass }) {
@@ -199,6 +199,37 @@ function DoctorDashboard({ appointments, onStatusUpdate, onCallNext, onRefresh }
     .sort((a, b) => a.tokenNumber - b.tokenNumber);
 
   const currentPatient = waitingQueue.find(a => a.status === "In Consultation");
+  // Patient's previous medical history
+  const [medicalHistory, setMedicalHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [showHistory, setShowHistory] = useState(true);
+
+  const currentPatientId = currentPatient?.patientId?._id;
+
+  useEffect(() => {
+    const loadMedicalHistory = async () => {
+      if (!currentPatientId) {
+        setMedicalHistory([]);
+        return;
+      }
+
+      try {
+        setHistoryLoading(true);
+        setHistoryError("");
+
+        const result = await fetchPatientTreatmentHistory(currentPatientId);
+
+        setMedicalHistory(result.data || []);
+      } catch (error) {
+        setHistoryError("Unable to load previous medical history.");
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+
+    loadMedicalHistory();
+  }, [currentPatientId]);
   const nextUp = waitingQueue.find(a => a.status !== "In Consultation");
   const handleCallNext = async () => {
     try {
@@ -311,6 +342,116 @@ function DoctorDashboard({ appointments, onStatusUpdate, onCallNext, onRefresh }
             </div>
 
             <form onSubmit={submitConsultation} className="p-8 space-y-6">
+              {/* Previous Medical History */}
+              <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
+
+                <button
+                  type="button"
+                  onClick={() => setShowHistory(!showHistory)}
+                  className="w-full flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800"
+                >
+                  <div className="text-left">
+                    <h3 className="font-bold text-slate-800 dark:text-white">
+                      Previous Medical History
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {medicalHistory.length} previous consultations
+                    </p>
+                  </div>
+
+                  <span className="text-indigo-500 font-bold">
+                    {showHistory ? "Hide ▲" : "View ▼"}
+                  </span>
+                </button>
+
+                {showHistory && (
+                  <div className="p-4 space-y-4">
+
+                    {historyLoading && (
+                      <p className="text-sm text-slate-500">
+                        Loading medical history...
+                      </p>
+                    )}
+
+                    {historyError && (
+                      <p className="text-sm text-red-500">
+                        {historyError}
+                      </p>
+                    )}
+
+                    {!historyLoading && medicalHistory.length === 0 && !historyError && (
+                      <p className="text-sm text-slate-500">
+                        No previous medical history available for this patient.
+                      </p>
+                    )}
+
+                    {medicalHistory.map((record) => (
+                      <div
+                        key={record._id}
+                        className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2"
+                      >
+                        <div className="flex justify-between flex-wrap gap-2">
+                          <h4 className="font-bold text-indigo-600">
+                            {record.diagnosis}
+                          </h4>
+
+                          <span className="text-xs text-slate-500">
+                            {new Date(record.consultationDate).toLocaleDateString("en-IN")}
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-slate-500">
+                          Doctor: {record.doctorId?.userId?.name || "N/A"}
+                          {" · "}
+                          Department: {record.departmentId?.name || "N/A"}
+                        </p>
+
+                        {record.symptoms && (
+                          <p className="text-sm text-slate-700 dark:text-slate-300">
+                            <strong className="text-slate-900 dark:text-white">Symptoms:</strong>{" "}
+                            {record.symptoms || "Not specified"}
+                          </p>
+                        )}
+
+                        {record.treatment && (
+                          <p className="text-sm text-slate-700 dark:text-slate-300">
+                            <strong className="text-slate-900 dark:text-white">Treatment:</strong>{" "}
+                            {record.treatment || "Not specified"}
+                          </p>
+                        )}
+
+                        {record.medicines?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-bold text-slate-500 mb-1">
+                              PRESCRIBED MEDICINES
+                            </p>
+
+                            {record.medicines.map((medicine, index) => (
+                              <p key={index} className="text-sm text-slate-700 dark:text-slate-300">
+                                • {medicine.name} — {medicine.dosage || "Dosage not specified"}
+                                {medicine.duration ? ` (${medicine.duration})` : ""}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+
+                        {record.notes && (
+                          <p className="text-sm text-slate-700 dark:text-slate-300">
+                            <strong className="text-slate-900 dark:text-white">Notes:</strong>{" "}
+                            {record.notes || "Not specified"}
+                          </p>
+                        )}
+
+                        {record.followUpDate && (
+                          <p className="text-xs text-indigo-500">
+                            Follow-up: {new Date(record.followUpDate).toLocaleDateString("en-IN")}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Diagnosis</label>

@@ -79,6 +79,8 @@ router.post("/", protect, async (req, res) => {
                 message: "Invalid appointment date."
             });
         }
+        // Prevent doctors from calling patients for future dates
+
 
         if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
             return res.status(400).json({
@@ -440,6 +442,16 @@ router.post(
                 return res.status(400).json({
                     success: false,
                     message: "Invalid appointment date."
+                });
+            }
+            const today = new Date().toLocaleDateString("en-CA", {
+                timeZone: "Asia/Kolkata"
+            });
+
+            if (date > today) {
+                return res.status(403).json({
+                    success: false,
+                    message: "You cannot start consultations for future appointments."
                 });
             }
 

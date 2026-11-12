@@ -108,6 +108,18 @@ router.post("/", protect, authorizeRoles("doctor"), async (req, res) => {
                 error.statusCode = 404;
                 throw error;
             }
+            // Prevent consultation before scheduled appointment date
+            const today = new Date().toLocaleDateString("en-CA", {
+                timeZone: "Asia/Kolkata"
+            });
+
+            if (appointment.appointmentDate > today) {
+                const error = new Error(
+                    "Cannot complete consultation before the scheduled appointment date."
+                );
+                error.statusCode = 403;
+                throw error;
+            }
 
             // Patient must already be called by the doctor
             if (appointment.status !== "In Consultation") {
