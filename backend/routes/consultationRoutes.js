@@ -162,6 +162,47 @@ router.post("/", protect, authorizeRoles("doctor"), async (req, res) => {
 
             await appointment.save({ session });
 
+            // Complete linked follow-up record
+            if (appointment.followUpOf || appointment.followUpId) {
+                const followUpFilter = appointment.followUpId
+                    ? {
+                        _id: appointment.followUpId,
+                        appointmentId: appointment._id
+                    }
+                    : {
+                        appointmentId: appointment._id
+                    };
+
+                const completedFollowUp =
+                    await FollowUp.findOneAndUpdate(
+                        {
+                            ...followUpFilter,
+                            patientId: appointment.patientId,
+                            doctorId: doctorRecord._id,
+                            status: "Appointment Booked"
+                        },
+                        {
+                            $set: {
+                                status: "Completed",
+                                completedAt: new Date()
+                            }
+                        },
+                        {
+                            new: true,
+                            session
+                        }
+                    );
+
+                if (!completedFollowUp) {
+                    const error = new Error(
+                        "Linked follow-up record not found or already updated."
+                    );
+                    error.statusCode = 409;
+                    throw error;
+                }
+            }
+
+
             // Save details for queue recalculation
             completedDoctorId = appointment.doctorId;
             completedAppointmentDate = appointment.appointmentDate;

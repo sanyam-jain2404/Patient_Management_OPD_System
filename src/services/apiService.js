@@ -75,6 +75,14 @@ export const fetchAppointments = async (params = {}) => {
 export const updateAppointmentStatus = async (id, statusData) => {
   return await apiRequest(`/appointments/${id}/status`, "PATCH", statusData);
 };
+export const callNextPatient = async (date) => {
+    return await apiRequest(
+        "/appointments/call-next",
+        "POST",
+        date ? { date } : {}
+    );
+};
+
 
 // Department services
 export const fetchDepartments = async () => {
@@ -100,6 +108,11 @@ export const recordConsultation = async (consultationData) => {
 
 export const fetchPatientTreatmentHistory = async (patientId) => {
   return await apiRequest(`/consultations/patient/${patientId}`);
+};
+
+// Follow-up services
+export const fetchMyFollowUps = async () => {
+  return await apiRequest("/follow-ups");
 };
 // Patient services
 

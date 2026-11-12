@@ -22,8 +22,8 @@ import Signup from "./pages/Signup";
 import BookAppointment from "./pages/BookAppointment";
 import DoctorVerification from "./pages/DoctorVerification";
 
-import { useEffect } from "react";
-import { fetchApiPatients } from "./services/apiService";
+// import { useEffect } from "react";
+// import { fetchApiPatients } from "./services/apiService";
 
 const NAV_SECTIONS = [
   {
@@ -341,19 +341,7 @@ function Layout() {
 }
 
 export default function App() {
-  useEffect(() => {
-    const initializeApiData = async () => {
-      const existingApiData = localStorage.getItem("apiPatients");
-      if (!existingApiData) {
-        const data = await fetchApiPatients();
-        if (data.length > 0) {
-          localStorage.setItem("apiPatients", JSON.stringify(data));
-          window.dispatchEvent(new Event("storage"));
-        }
-      }
-    };
-    initializeApiData();
-  }, []);
+  
 
   return (
     <ToastProvider>

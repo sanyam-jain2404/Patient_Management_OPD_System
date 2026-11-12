@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../components/Toast";
-import { fetchAppointments, updateAppointmentStatus, recordConsultation } from "../services/apiService";
+import { fetchAppointments, updateAppointmentStatus, recordConsultation, callNextPatient } from "../services/apiService";
+
 
 function StatCard({ title, value, icon, subtext, colorClass }) {
   return (
@@ -18,34 +19,72 @@ function StatCard({ title, value, icon, subtext, colorClass }) {
   );
 }
 
-function PatientDashboard({ appointments }) {
+
+function PatientDashboard({ appointments, onCancel }) {
   const navigate = useNavigate();
-  const nextAppt = appointments.find(a => ["Booked", "Waiting", "In Consultation"].includes(a.status));
+
+  const nextAppt = appointments.find((a) =>
+    ["Booked", "Waiting", "In Consultation"].includes(a.status)
+  );
+
+  const handleCancel = (appt) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to cancel appointment Token #${appt.tokenNumber}?`
+    );
+
+    if (confirmed) {
+      onCancel(appt._id);
+    }
+  };
 
   return (
     <div className="space-y-6">
       {nextAppt ? (
         <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 opacity-10 text-9xl">🏥</div>
+          <div className="absolute top-0 right-0 p-8 opacity-10 text-9xl">
+            🏥
+          </div>
+
           <div className="relative z-10">
-            <h2 className="text-sm font-bold uppercase tracking-widest text-indigo-200 mb-2">Current Appointment</h2>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-indigo-200 mb-2">
+              Current Appointment
+            </h2>
+
             <div className="flex flex-col md:flex-row md:items-end gap-6">
               <div className="flex-1">
-                <p className="text-4xl font-black mb-2">Token #{nextAppt.tokenNumber}</p>
-                <p className="text-lg font-medium text-indigo-100">Dr. {nextAppt.doctorId.userId.name}</p>
-                <p className="text-sm text-indigo-200">{nextAppt.departmentId.name} · {nextAppt.appointmentDate}</p>
+                <p className="text-4xl font-black mb-2">
+                  Token #{nextAppt.tokenNumber}
+                </p>
+
+                <p className="text-lg font-medium text-indigo-100">
+                  Dr. {nextAppt.doctorId.userId.name}
+                </p>
+
+                <p className="text-sm text-indigo-200">
+                  {nextAppt.departmentId.name} · {nextAppt.appointmentDate}
+                </p>
               </div>
+
               <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/20 min-w-[200px]">
-                <p className="text-xs font-bold uppercase tracking-widest text-indigo-200 mb-1">Queue Status</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-indigo-200 mb-1">
+                  Queue Status
+                </p>
+
                 <p className="text-2xl font-bold">{nextAppt.status}</p>
-                <p className="text-xs text-indigo-200 mt-1">Est. Wait: {nextAppt.estimatedWaitMinutes} mins</p>
+
+                <p className="text-xs text-indigo-200 mt-1">
+                  Est. Wait: {nextAppt.estimatedWaitMinutes} mins
+                </p>
               </div>
             </div>
           </div>
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-12 border-2 border-dashed border-slate-200 dark:border-slate-800 text-center">
-          <p className="text-slate-500 dark:text-slate-400 mb-4">You have no upcoming appointments.</p>
+          <p className="text-slate-500 dark:text-slate-400 mb-4">
+            You have no upcoming appointments.
+          </p>
+
           <button
             onClick={() => navigate("/book")}
             className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-xl transition-all"
@@ -56,7 +95,10 @@ function PatientDashboard({ appointments }) {
       )}
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
-        <h3 className="font-bold text-slate-800 dark:text-white mb-4">Your Appointment History</h3>
+        <h3 className="font-bold text-slate-800 dark:text-white mb-4">
+          Your Appointment History
+        </h3>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -65,33 +107,79 @@ function PatientDashboard({ appointments }) {
                 <th className="pb-3 px-2">Doctor</th>
                 <th className="pb-3 px-2">Token</th>
                 <th className="pb-3 px-2">Status</th>
+                <th className="pb-3 px-2">Action</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
-              {appointments.map(appt => (
+              {appointments.map((appt) => (
                 <tr key={appt._id} className="text-sm">
-                  <td className="py-4 px-2 text-slate-600 dark:text-slate-300">{appt.appointmentDate}</td>
-                  <td className="py-4 px-2 font-medium text-slate-800 dark:text-slate-100">Dr. {appt.doctorId.userId.name}</td>
-                  <td className="py-4 px-2 text-slate-500">#{appt.tokenNumber}</td>
+                  <td className="py-4 px-2 text-slate-600 dark:text-slate-300">
+                    {appt.appointmentDate}
+                  </td>
+
+                  <td className="py-4 px-2 font-medium text-slate-800 dark:text-slate-100">
+                    Dr. {appt.doctorId.userId.name}
+                  </td>
+
+                  <td className="py-4 px-2 text-slate-500">
+                    #{appt.tokenNumber}
+                  </td>
+
                   <td className="py-4 px-2">
-                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${appt.status === "Completed" ? "bg-emerald-100 text-emerald-600" :
-                        appt.status === "Cancelled" ? "bg-rose-100 text-rose-600" :
-                          "bg-indigo-100 text-indigo-600"
-                      }`}>{appt.status}</span>
+                    <span
+                      className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${appt.status === "Completed" ||
+                        appt.status === "Discharged"
+                        ? "bg-emerald-100 text-emerald-600"
+                        : appt.status === "Cancelled"
+                          ? "bg-rose-100 text-rose-600"
+                          : appt.status === "No Show"
+                            ? "bg-amber-100 text-amber-600"
+                            : "bg-indigo-100 text-indigo-600"
+                        }`}
+                    >
+                      {appt.status}
+                    </span>
+                  </td>
+
+                  <td className="py-4 px-2">
+                    {["Booked", "Waiting"].includes(appt.status) ? (
+                      <button
+                        onClick={() => handleCancel(appt)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/20 dark:hover:bg-rose-900/40 transition-all"
+                      >
+                        Cancel
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {appointments.length === 0 && <p className="text-center py-8 text-slate-400 text-sm">No history found.</p>}
+
+          {appointments.length === 0 && (
+            <p className="text-center py-8 text-slate-400 text-sm">
+              No history found.
+            </p>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function DoctorDashboard({ appointments, onStatusUpdate, onRefresh }) {
+
+function DoctorDashboard({ appointments, onStatusUpdate, onCallNext, onRefresh }) {
   const [activeConsultation, setActiveConsultation] = useState(null);
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata"
+  });
+
+  const [selectedDate, setSelectedDate] = useState(today);
+
+  const isFutureDate = selectedDate > today;
   const [consultationForm, setConsultationForm] = useState({
     diagnosis: "",
     treatment: "",
@@ -100,11 +188,27 @@ function DoctorDashboard({ appointments, onStatusUpdate, onRefresh }) {
     followUpDate: ""
   });
 
-  const waitingQueue = appointments.filter(a => ["Booked", "Waiting", "In Consultation"].includes(a.status))
+  const selectedDateAppointments = appointments.filter(
+    (a) => a.appointmentDate === selectedDate
+  );
+
+  const waitingQueue = selectedDateAppointments
+    .filter((a) =>
+      ["Booked", "Waiting", "In Consultation"].includes(a.status)
+    )
     .sort((a, b) => a.tokenNumber - b.tokenNumber);
 
   const currentPatient = waitingQueue.find(a => a.status === "In Consultation");
   const nextUp = waitingQueue.find(a => a.status !== "In Consultation");
+  const handleCallNext = async () => {
+    try {
+      const result = await callNextPatient(selectedDate);
+      alert(result.message);
+      await onRefresh();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 
   const handleConsultationChange = (e) => setConsultationForm({ ...consultationForm, [e.target.name]: e.target.value });
 
@@ -145,6 +249,24 @@ function DoctorDashboard({ appointments, onStatusUpdate, onRefresh }) {
             <span>Patient Queue</span>
             <span className="bg-indigo-100 text-indigo-600 text-[10px] px-2 py-0.5 rounded-full">{waitingQueue.length} Waiting</span>
           </h3>
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
+              SELECT APPOINTMENT DATE
+            </label>
+
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+
+            {isFutureDate && (
+              <p className="text-xs text-amber-500 mt-2">
+                Future appointments are visible. Consultation will be available on the scheduled date.
+              </p>
+            )}
+          </div>
           <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
             {waitingQueue.map(appt => (
               <div key={appt._id} className={`p-4 rounded-xl border transition-all ${appt.status === "In Consultation" ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20" : "border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"}`}>
@@ -156,11 +278,13 @@ function DoctorDashboard({ appointments, onStatusUpdate, onRefresh }) {
                 <p className="text-xs text-slate-500 mt-1">{appt.patientId.age}y · {appt.patientId.gender}</p>
                 {appt.status !== "In Consultation" && (
                   <button
-                    onClick={() => onStatusUpdate(appt._id, "In Consultation")}
-                    className="mt-3 w-full py-1.5 text-xs font-bold bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 text-indigo-600 rounded-lg hover:bg-indigo-500 hover:text-white transition-all"
+                    onClick={handleCallNext}
+                    disabled={isFutureDate}
+                    className="mt-3 w-full py-1.5 text-xs font-bold bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 text-indigo-600 rounded-lg hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Start Consultation
                   </button>
+
                 )}
               </div>
             ))}
@@ -267,8 +391,9 @@ function DoctorDashboard({ appointments, onStatusUpdate, onRefresh }) {
             <p className="text-slate-500 dark:text-slate-400 mb-8 max-w-sm mx-auto">Click "Start Consultation" on a patient in the queue to begin recording their medical notes.</p>
             {nextUp && (
               <button
-                onClick={() => onStatusUpdate(nextUp._id, "In Consultation")}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 py-3 rounded-2xl transition-all shadow-lg shadow-indigo-500/25"
+                onClick={handleCallNext}
+                disabled={isFutureDate}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 py-3 rounded-2xl transition-all shadow-lg shadow-indigo-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Call Next Patient: {nextUp.patientId.name}
               </button>
@@ -325,8 +450,8 @@ function AdminDashboard({ appointments }) {
                   <td className="py-4 px-5 text-slate-600 dark:text-slate-400">Dr. {appt.doctorId?.userId?.name}</td>
                   <td className="py-4 px-5">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${appt.status === "Completed" ? "bg-emerald-100 text-emerald-600" :
-                        appt.status === "Cancelled" ? "bg-rose-100 text-rose-600" :
-                          "bg-amber-100 text-amber-600"
+                      appt.status === "Cancelled" ? "bg-rose-100 text-rose-600" :
+                        "bg-amber-100 text-amber-600"
                       }`}>{appt.status}</span>
                   </td>
                   <td className="py-4 px-5 font-mono text-slate-400">#{appt.tokenNumber}</td>
@@ -368,6 +493,17 @@ export default function Dashboard() {
       toast(err.message, "error");
     }
   };
+  const handleCallNext = async () => {
+    try {
+      const result = await callNextPatient();
+
+      toast(result.message, "success");
+
+      await loadData();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -399,10 +535,16 @@ export default function Dashboard() {
         <DoctorDashboard
           appointments={appointments}
           onStatusUpdate={handleStatusUpdate}
+          onCallNext={handleCallNext}
           onRefresh={loadData}
         />
       )}
-      {user.role === "patient" && <PatientDashboard appointments={appointments} />}
+      {user.role === "patient" && (
+        <PatientDashboard
+          appointments={appointments}
+          onCancel={(id) => handleStatusUpdate(id, "Cancelled")}
+        />
+      )}
     </div>
   );
 }

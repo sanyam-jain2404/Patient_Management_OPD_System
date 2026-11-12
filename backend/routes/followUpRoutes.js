@@ -70,7 +70,14 @@ router.get("/", protect, async (req, res) => {
                     select: "name email"
                 }
             })
-            .populate("consultationId", "diagnosis consultationDate")
+            .populate({
+                path: "consultationId",
+                select: "diagnosis consultationDate departmentId",
+                populate: {
+                    path: "departmentId",
+                    select: "name"
+                }
+            })
             .populate("appointmentId", "appointmentDate appointmentTime tokenNumber status")
             .sort({ dueDate: 1 });
 
