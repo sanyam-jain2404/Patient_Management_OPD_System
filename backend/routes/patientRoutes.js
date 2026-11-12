@@ -271,13 +271,22 @@ router.get(
         }
     }
 );
+
 router.post(
     "/",
     protect,
     authorizeRoles("admin"),
     async (req, res) => {
         try {
-            const { name, age, gender, phone, address } = req.body;
+            const {
+                name,
+                age,
+                gender,
+                phone,
+                address,
+                bloodGroup,
+                medicalHistory
+            } = req.body;
 
             if (
                 !name?.trim() ||
@@ -293,12 +302,23 @@ router.post(
                 });
             }
 
+            const existingPatient = await Patient.findOne({ phone: phone.trim() });
+
+            if (existingPatient) {
+                return res.status(409).json({
+                    success: false,
+                    message: "Patient with this phone number already exists"
+                });
+            }
+
             const patient = await Patient.create({
                 name: name.trim(),
-                age,
+                age: Number(age),
                 gender,
                 phone: phone.trim(),
-                address: address?.trim() || ""
+                bloodGroup: bloodGroup || "",
+                address: address?.trim() || "",
+                medicalHistory: medicalHistory?.trim() || ""
             });
 
             res.status(201).json({
@@ -306,7 +326,10 @@ router.post(
                 message: "Patient registered successfully",
                 data: patient
             });
+
         } catch (error) {
+            console.error("Patient registration error:", error);
+
             if (error.name === "ValidationError") {
                 return res.status(400).json({
                     success: false,
@@ -321,5 +344,93 @@ router.post(
         }
     }
 );
+
+// Update existing patient
+router.put(
+    "/:id",
+    protect,
+    authorizeRoles("admin"),
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+
+            if (!mongoose.isValidObjectId(id)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid patient ID"
+                });
+            }
+
+            const patient = await Patient.findById(id);
+
+            if (!patient) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Patient not found"
+                });
+            }
+
+            const {
+                name,
+                age,
+                gender,
+                phone,
+                address,
+                bloodGroup,
+                medicalHistory
+            } = req.body;
+
+            // Check whether another patient uses this phone
+            if (phone && phone.trim() !== patient.phone) {
+                const existingPatient = await Patient.findOne({
+                    phone: phone.trim(),
+                    _id: { $ne: id }
+                });
+
+                if (existingPatient) {
+                    return res.status(409).json({
+                        success: false,
+                        message: "Phone number already belongs to another patient"
+                    });
+                }
+            }
+
+            // Update only fields supplied by the frontend
+            if (name !== undefined) patient.name = name.trim();
+            if (age !== undefined) patient.age = Number(age);
+            if (gender !== undefined) patient.gender = gender;
+            if (phone !== undefined) patient.phone = phone.trim();
+            if (address !== undefined) patient.address = address.trim();
+            if (bloodGroup !== undefined) patient.bloodGroup = bloodGroup;
+            if (medicalHistory !== undefined) {
+                patient.medicalHistory = medicalHistory;
+            }
+
+            await patient.save();
+
+            res.status(200).json({
+                success: true,
+                message: "Patient updated successfully",
+                data: patient
+            });
+
+        } catch (error) {
+            console.error("Update patient error:", error);
+
+            if (error.name === "ValidationError") {
+                return res.status(400).json({
+                    success: false,
+                    message: error.message
+                });
+            }
+
+            res.status(500).json({
+                success: false,
+                message: "Unable to update patient"
+            });
+        }
+    }
+);
+
 
 export default router;

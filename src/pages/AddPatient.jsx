@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../components/Toast";
+import {
+  createApiPatient,
+  fetchApiPatients,
+  updateApiPatient
+} from "../services/apiService";
 
-const DOCTORS = [
-  "General Physician", "Cardiologist", "Dermatologist",
-  "Orthopedic", "Neurologist", "Pediatrician", "ENT Specialist",
-];
+
 
 const BLOOD_GROUPS = ["A+", "A−", "B+", "B−", "AB+", "AB−", "O+", "O−"];
-const PRIORITIES   = ["Low", "Medium", "High", "Critical"];
-const GENDERS      = ["Male", "Female", "Other"];
+
+const GENDERS = ["Male", "Female", "Other"];
 
 function Field({ label, children, required }) {
   return (
@@ -26,69 +28,122 @@ const inputCls = "w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 d
 
 export default function AddPatient() {
   const navigate = useNavigate();
-  const toast    = useToast();
+  const toast = useToast();
 
   const [step, setStep] = useState(0); // 0: lookup, 1: form
   const [isExisting, setIsExisting] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    name: "", age: "", gender: "Male", blood: "B+",
-    disease: "", contact: "", doctor: "", date: new Date().toISOString().slice(0, 10),
-    priority: "Low", notes: "",
+    name: "", age: "", gender: "Male", blood: "",
+    contact: "", address: "",
   });
   const [submitted, setSubmitted] = useState(false);
 
   const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const handleLookup = (e) => {
+  const [lookupLoading, setLookupLoading] = useState(false);
+
+  const handleLookup = async (e) => {
     e.preventDefault();
+
     if (!form.name.trim() || !form.contact.trim()) {
       toast("Please enter both name and contact number.", "warning");
       return;
     }
 
-    const api      = JSON.parse(localStorage.getItem("apiPatients")) || [];
-    const existing = JSON.parse(localStorage.getItem("patients"))    || [];
-    const all = [...api, ...existing];
+    try {
+      setLookupLoading(true);
 
-    const found = all.find(p =>
-      p.name?.toLowerCase().trim() === form.name.toLowerCase().trim() ||
-      p.contact?.trim() === form.contact.trim()
-    );
+      const response = await fetchApiPatients();
+      const patients = response.data || [];
 
-    if (found) {
-      setForm({ ...found });
-      setIsExisting(true);
-      toast(`Patient found! You can now edit ${found.name}'s details.`, "info");
-    } else {
-      setIsExisting(false);
-    }
-    setStep(1);
-  };
+      const found = patients.find(
+        (p) => p.phone?.trim() === form.contact.trim()
+      );
 
-  const handleSubmit = e => {
-    e.preventDefault();
-    const existing = JSON.parse(localStorage.getItem("patients"))    || [];
-
-    if (isExisting) {
-      // Update existing
-      const updated = existing.map(p => p.id === form.id ? { ...form } : p);
-      localStorage.setItem("patients", JSON.stringify(updated));
-      toast(`✅ ${form.name}'s records updated!`, "success");
-    } else {
-      // Add new
-      const apiCount = (JSON.parse(localStorage.getItem("apiPatients")) || []).length;
-      if (apiCount + existing.length >= 100) {
-        toast("❌ OPD is full! Cannot add more patients.", "error");
+      if (found && found.name?.toLowerCase().trim() !== form.name.toLowerCase().trim()) {
+        toast("Phone number exists, but the name does not match. Please verify details.", "error");
         return;
       }
-      const newPatient = { id: Date.now(), ...form };
-      localStorage.setItem("patients", JSON.stringify([...existing, newPatient]));
-      toast(`✅ ${form.name} added successfully!`, "success");
-    }
 
-    window.dispatchEvent(new Event("storage"));
-    setSubmitted(true);
+      if (found) {
+        setForm({
+          ...form,
+          _id: found._id,
+          name: found.name || "",
+          age: found.age ?? "",
+          gender: found.gender || "Male",
+          blood: found.bloodGroup || "",
+          contact: found.phone || "",
+          
+          
+          
+          
+          
+          address: found.address || "",
+        });
+
+        setIsExisting(true);
+
+        toast(`Patient found! You can now edit ${found.name}'s details.`, "info");
+      } else {
+        setIsExisting(false);
+        toast("New patient. Please complete registration.", "info");
+      }
+
+      setStep(1);
+
+    } catch (error) {
+      console.error("Patient lookup error:", error);
+      toast(error.message || "Unable to search patients.", "error");
+    } finally {
+      setLookupLoading(false);
+    }
   };
+
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const patientData = {
+        name: form.name.trim(),
+        age: Number(form.age),
+        gender: form.gender,
+        phone: form.contact.trim(),
+        bloodGroup: form.blood,
+        address: form.address.trim()
+
+      };
+
+      const response = isExisting
+        ? await updateApiPatient(form._id, patientData)
+        : await createApiPatient(patientData);
+
+      if (!response.success) {
+        throw new Error(response.message || "Registration failed");
+      }
+
+      toast(
+        isExisting
+          ? "Patient records updated successfully!"
+          : "Patient registered successfully!",
+        "success"
+      );
+      setSubmitted(true);
+
+    } catch (error) {
+      console.error("Patient registration error:", error);
+      toast(
+        error.message || "Unable to register patient",
+        "error"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   if (submitted) {
     return (
@@ -98,7 +153,7 @@ export default function AddPatient() {
         <p className="text-slate-500 dark:text-slate-400 text-sm">{form.name}'s records have been {isExisting ? "updated" : "registered"} in the OPD system.</p>
         <div className="flex gap-3 mt-2">
           <button onClick={() => navigate("/")} className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-5 py-2.5 rounded-xl transition-all">View All Patients</button>
-          <button onClick={() => { setSubmitted(false); setStep(0); setForm({ name:"",age:"",gender:"Male",blood:"B+",disease:"",contact:"",doctor:"",date:new Date().toISOString().slice(0,10),priority:"Low",notes:"" }); }} className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold px-5 py-2.5 rounded-xl transition-all">Add Another</button>
+          <button onClick={() => { setSubmitted(false); setStep(0); setIsExisting(false); setForm({ name: "", age: "", gender: "Male", blood: "", contact: "", address: "" }); }} className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold px-5 py-2.5 rounded-xl transition-all">Add Another</button>
         </div>
       </div>
     );
@@ -121,8 +176,12 @@ export default function AddPatient() {
           <Field label="Mobile Number" required>
             <input name="contact" required placeholder="+91 98765 43210" onChange={handleChange} value={form.contact} className={inputCls} />
           </Field>
-          <button type="submit" className="w-full py-4 rounded-2xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 transition-all hover:scale-[1.02] active:scale-[0.98]">
-            Continue →
+          <button
+            type="submit"
+            disabled={lookupLoading}
+            className="w-full py-4 rounded-2xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+          >
+            {lookupLoading ? "Searching..." : "Continue →"}
           </button>
         </form>
       </div>
@@ -162,59 +221,44 @@ export default function AddPatient() {
               <input name="age" type="number" required min={0} max={150} placeholder="e.g. 35" onChange={handleChange} value={form.age} className={inputCls} />
             </Field>
             <Field label="Gender">
-              <select name="gender" onChange={handleChange} value={form.gender} className={inputCls}>
+              <select name="gender" required onChange={handleChange} value={form.gender} className={inputCls}>
                 {GENDERS.map(g => <option key={g}>{g}</option>)}
               </select>
             </Field>
             <Field label="Blood Group">
               <select name="blood" onChange={handleChange} value={form.blood} className={inputCls}>
+                <option value="">Not specified</option>
                 {BLOOD_GROUPS.map(b => <option key={b}>{b}</option>)}
               </select>
             </Field>
-            <Field label="Admission Date" required>
-              <input name="date" type="date" required onChange={handleChange} value={form.date} className={inputCls} />
+
+            <Field label="Address">
+              <input
+                name="address"
+                placeholder="Enter patient address"
+                onChange={handleChange}
+                value={form.address}
+                className={inputCls}
+              />
             </Field>
           </div>
         </div>
 
-        {/* Medical Info section */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-          <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-5 flex items-center gap-2">
-            <span className="w-1 h-4 bg-rose-500 rounded-full inline-block" />
-            Medical Information
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Diagnosis / Disease" required>
-              <input name="disease" required placeholder="e.g. Hypertension" onChange={handleChange} value={form.disease} className={inputCls} />
-            </Field>
-            <Field label="Assigned Doctor" required>
-              <select name="doctor" required onChange={handleChange} value={form.doctor} className={inputCls}>
-                <option value="">Select Doctor</option>
-                {DOCTORS.map(d => <option key={d}>{d}</option>)}
-              </select>
-            </Field>
-            <Field label="Priority / Severity">
-              <select name="priority" onChange={handleChange} value={form.priority} className={inputCls}>
-                {PRIORITIES.map(p => <option key={p}>{p}</option>)}
-              </select>
-            </Field>
-            <div className="sm:col-span-2">
-              <Field label="Clinical Notes">
-                <textarea
-                  name="notes" rows={3} placeholder="Any additional notes, allergies, past medical history..."
-                  onChange={handleChange} value={form.notes}
-                  className={inputCls + " resize-none"}
-                />
-              </Field>
-            </div>
-          </div>
-        </div>
+
 
         {/* Actions */}
         <div className="flex gap-3 justify-end">
           <button type="button" onClick={() => setStep(0)} className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition-all">Cancel</button>
-          <button type="submit" className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow hover:shadow-indigo-500/30 hover:scale-105 active:scale-95 transition-all">
-            {isExisting ? "💾 Update Records" : "➕ Register Patient"}
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow hover:shadow-indigo-500/30 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+          >
+            {loading
+              ? "Registering..."
+              : isExisting
+                ? "💾 Update Records"
+                : "➕ Register Patient"}
           </button>
         </div>
       </form>

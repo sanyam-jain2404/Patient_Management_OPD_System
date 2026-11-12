@@ -10,6 +10,7 @@ const routeLabels = {
   "/about":        "About",
   "/contact":      "Contact",
   "/appointments": "Appointments",
+  "/admin/book": "Book for Patient",
 };
 
 export default function Header() {

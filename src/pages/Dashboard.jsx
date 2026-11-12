@@ -557,6 +557,10 @@ function AdminDashboard({ appointments }) {
     completed: appointments.filter(a => a.status === "Completed").length,
   };
 
+  const recentAppointments = [...appointments]
+  .sort((a, b) => new Date(b.bookedAt) - new Date(a.bookedAt))
+  .slice(0, 10);
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -582,7 +586,7 @@ function AdminDashboard({ appointments }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
-              {appointments.slice(0, 10).map(appt => (
+              {recentAppointments.map(appt => (
                 <tr key={appt._id} className="text-sm">
                   <td className="py-4 px-5">
                     <p className="font-bold text-slate-800 dark:text-slate-100">{appt.patientId?.name || "Unknown"}</p>

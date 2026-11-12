@@ -21,6 +21,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import BookAppointment from "./pages/BookAppointment";
 import DoctorVerification from "./pages/DoctorVerification";
+import AdminBookAppointment from "./pages/AdminBookAppointment";
 
 // import { useEffect } from "react";
 // import { fetchApiPatients } from "./services/apiService";
@@ -51,6 +52,12 @@ const NAV_SECTIONS = [
       },
       { path: "/", icon: "🧑‍⚕️", label: "All Patients", roles: ["admin", "doctor"] },
       { path: "/add", icon: "➕", label: "Add Patient", roles: ["admin"] },
+      {
+        path: "/admin/book",
+        icon: "🗓️",
+        label: "Book for Patient",
+        roles: ["admin"],
+      },
       { path: "/discharged", icon: "🚪", label: "Discharged", roles: ["admin"] },
     ],
   },
@@ -329,6 +336,15 @@ function Layout() {
                     </ProtectedRoute>
                   }
                 />
+
+                <Route
+                  path="/admin/book"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin"]}>
+                      <AdminBookAppointment />
+                    </ProtectedRoute>
+                  }
+                />
               </Routes>
 
             </div>
@@ -341,7 +357,7 @@ function Layout() {
 }
 
 export default function App() {
-  
+
 
   return (
     <ToastProvider>
