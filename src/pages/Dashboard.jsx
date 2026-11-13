@@ -479,6 +479,20 @@ function DoctorDashboard({ appointments, onStatusUpdate, onCallNext, onRefresh }
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  Doctor Notes
+                </label>
+
+                <textarea
+                  name="notes"
+                  rows={3}
+                  placeholder="Enter observations, advice, and special instructions..."
+                  value={consultationForm.notes}
+                  onChange={handleConsultationChange}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                />
+              </div>
 
               <div>
                 <div className="flex justify-between items-center mb-3">
@@ -558,8 +572,8 @@ function AdminDashboard({ appointments }) {
   };
 
   const recentAppointments = [...appointments]
-  .sort((a, b) => new Date(b.bookedAt) - new Date(a.bookedAt))
-  .slice(0, 10);
+    .sort((a, b) => new Date(b.bookedAt) - new Date(a.bookedAt))
+    .slice(0, 10);
 
   return (
     <div className="space-y-6">

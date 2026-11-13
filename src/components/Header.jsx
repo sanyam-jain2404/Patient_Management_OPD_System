@@ -11,6 +11,7 @@ const routeLabels = {
   "/contact":      "Contact",
   "/appointments": "Appointments",
   "/admin/book": "Book for Patient",
+  "/all-doctors": "All Doctors",
 };
 
 export default function Header() {

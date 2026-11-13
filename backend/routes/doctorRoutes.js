@@ -14,28 +14,52 @@ const router = express.Router();
 router.get("/", protect, async (req, res) => {
     try {
         const { departmentId, specialization } = req.query;
-        let query = { isVerified: true };
 
-        if (departmentId) query.departmentId = departmentId;
-        if (specialization) query.specialization = specialization;
+        // Find verified doctor users first
+        const verifiedUsers = await User.find({
+            role: "doctor",
+            isVerified: true
+        }).select("_id");
+
+        const verifiedUserIds = verifiedUsers.map(user => user._id);
+
+        // Find doctor profiles belonging to verified users
+        let query = {
+            userId: { $in: verifiedUserIds }
+        };
+
+        if (departmentId) {
+            query.departmentId = departmentId;
+        }
+
+        if (specialization) {
+            query.specialization = specialization;
+        }
 
         const doctors = await Doctor.find(query)
-            .populate({ path: "userId", select: "name email avatar" })
+            .populate({
+                path: "userId",
+                select: "name email avatar"
+            })
             .populate("departmentId", "name")
             .sort({ specialization: 1 });
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             count: doctors.length,
             data: doctors
         });
+
     } catch (error) {
-        res.status(500).json({
+        console.error("Fetch doctors error:", error);
+
+        return res.status(500).json({
             success: false,
             message: "Unable to fetch doctors"
         });
     }
 });
+
 
 /**
  * GET /api/doctors/me
@@ -99,6 +123,110 @@ router.patch("/me", protect, authorizeRoles("doctor"), async (req, res) => {
         res.status(500).json({
             success: false,
             message: "Unable to update doctor profile"
+        });
+    }
+});
+
+/**
+ * PATCH /api/doctors/:id
+ * Admin updates a doctor's profile.
+ */
+router.patch("/:id", protect, authorizeRoles("admin"), async (req, res) => {
+    try {
+        const { specialization, qualification, experience, departmentId } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid doctor ID"
+            });
+        }
+
+        const doctor = await Doctor.findById(req.params.id);
+
+        if (!doctor) {
+            return res.status(404).json({
+                success: false,
+                message: "Doctor not found"
+            });
+        }
+
+        // Validate experience
+        if (
+            experience !== undefined &&
+            (!Number.isFinite(Number(experience)) || Number(experience) < 0)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Experience must be a valid non-negative number"
+            });
+        }
+
+        // Update Doctor collection
+        if (specialization !== undefined) {
+            doctor.specialization = specialization.trim();
+        }
+
+        if (qualification !== undefined) {
+            doctor.qualification = qualification.trim();
+        }
+
+        if (experience !== undefined) {
+            doctor.experience = Number(experience);
+        }
+
+        if (departmentId !== undefined) {
+            if (!mongoose.Types.ObjectId.isValid(departmentId)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid department ID"
+                });
+            }
+
+            doctor.departmentId = departmentId;
+        }
+
+        await doctor.save();
+
+        // Keep User collection synchronized
+        const user = await User.findById(doctor.userId);
+
+        if (user) {
+            if (specialization !== undefined) {
+                user.specialization = doctor.specialization;
+            }
+
+            if (qualification !== undefined) {
+                user.qualification = doctor.qualification;
+            }
+
+            if (experience !== undefined) {
+                user.experience = doctor.experience;
+            }
+
+            if (departmentId !== undefined) {
+                user.departmentId = doctor.departmentId;
+            }
+
+            await user.save();
+        }
+
+        const updatedDoctor = await Doctor.findById(doctor._id)
+            .populate("userId", "name email")
+            .populate("departmentId", "name");
+
+        return res.status(200).json({
+            success: true,
+            message: "Doctor details updated successfully",
+            data: updatedDoctor
+        });
+
+    } catch (error) {
+        console.error("Update doctor error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Unable to update doctor details"
         });
     }
 });

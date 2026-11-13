@@ -76,11 +76,11 @@ export const updateAppointmentStatus = async (id, statusData) => {
   return await apiRequest(`/appointments/${id}/status`, "PATCH", statusData);
 };
 export const callNextPatient = async (date) => {
-    return await apiRequest(
-        "/appointments/call-next",
-        "POST",
-        date ? { date } : {}
-    );
+  return await apiRequest(
+    "/appointments/call-next",
+    "POST",
+    date ? { date } : {}
+  );
 };
 
 
@@ -95,6 +95,14 @@ export const fetchDoctors = async (params = {}) => {
   const query = new URLSearchParams(params).toString();
   if (query) endpoint += `?${query}`;
   return await apiRequest(endpoint);
+};
+// Admin: Update doctor details
+export const updateDoctor = async (id, doctorData) => {
+  return await apiRequest(
+    `/doctors/${id}`,
+    "PATCH",
+    doctorData
+  );
 };
 
 export const fetchMyDoctorProfile = async () => {

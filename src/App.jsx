@@ -22,6 +22,7 @@ import Signup from "./pages/Signup";
 import BookAppointment from "./pages/BookAppointment";
 import DoctorVerification from "./pages/DoctorVerification";
 import AdminBookAppointment from "./pages/AdminBookAppointment";
+import AllDoctors from "./pages/AllDoctors";
 
 // import { useEffect } from "react";
 // import { fetchApiPatients } from "./services/apiService";
@@ -42,6 +43,12 @@ const NAV_SECTIONS = [
         path: "/verify-doctors",
         icon: "🛡️",
         label: "Verify Doctors",
+        roles: ["admin"],
+      },
+      {
+        path: "/all-doctors",
+        icon: "👨‍⚕️",
+        label: "All Doctors",
         roles: ["admin"],
       },
       {
@@ -297,6 +304,14 @@ function Layout() {
                   element={
                     <ProtectedRoute allowedRoles={["admin"]}>
                       <DoctorVerification />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/all-doctors"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin"]}>
+                      <AllDoctors />
                     </ProtectedRoute>
                   }
                 />

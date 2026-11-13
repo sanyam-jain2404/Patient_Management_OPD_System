@@ -1,9 +1,11 @@
+
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
   fetchMyPatientProfile,
   fetchApiPatientById,
-  fetchPatientTreatmentHistory
+  fetchPatientTreatmentHistory,
+  fetchDischargedPatients
 } from "../services/apiService";
 
 const PRIORITY_STYLES = {
@@ -14,9 +16,21 @@ const PRIORITY_STYLES = {
 };
 
 function avatarColor(name = "") {
-  const colors = ["from-indigo-500 to-indigo-700", "from-violet-500 to-violet-700", "from-emerald-500 to-emerald-700", "from-rose-500 to-rose-700", "from-amber-500 to-amber-700", "from-cyan-500 to-cyan-700"];
+  const colors = [
+    "from-indigo-500 to-indigo-700",
+    "from-violet-500 to-violet-700",
+    "from-emerald-500 to-emerald-700",
+    "from-rose-500 to-rose-700",
+    "from-amber-500 to-amber-700",
+    "from-cyan-500 to-cyan-700"
+  ];
+
   let hash = 0;
-  for (let c of name) hash = (hash * 31 + c.charCodeAt(0)) & 0xffffffff;
+
+  for (let c of name) {
+    hash = (hash * 31 + c.charCodeAt(0)) & 0xffffffff;
+  }
+
   return colors[Math.abs(hash) % colors.length];
 }
 
@@ -25,8 +39,12 @@ function InfoRow({ label, value, icon }) {
     <div className="flex items-start gap-3 py-3 border-b border-slate-100 dark:border-slate-800 last:border-0">
       <span className="text-lg w-7 shrink-0">{icon}</span>
       <div>
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{label}</p>
-        <p className="text-sm font-semibold text-slate-800 dark:text-white mt-0.5">{value || "—"}</p>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          {label}
+        </p>
+        <p className="text-sm font-semibold text-slate-800 dark:text-white mt-0.5">
+          {value || "—"}
+        </p>
       </div>
     </div>
   );
@@ -35,22 +53,27 @@ function InfoRow({ label, value, icon }) {
 export default function PatientDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [treatmentHistory, setTreatmentHistory] = useState([]);
+  const [isDischarged, setIsDischarged] = useState(null);
+
+  const currentUser = JSON.parse(
+    localStorage.getItem("user") || "{}"
+  );
 
   useEffect(() => {
     const loadPatient = async () => {
       try {
         setLoading(true);
         setError("");
-
-        const user = JSON.parse(localStorage.getItem("user"));
+        setIsDischarged(null);
 
         let response;
 
-        if (user?.role === "patient") {
+        if (currentUser?.role === "patient") {
           response = await fetchMyPatientProfile();
         } else {
           response = await fetchApiPatientById(id);
@@ -68,12 +91,51 @@ export default function PatientDetails() {
             : ""
         });
 
+        // Load treatment history
         const historyResponse = await fetchPatientTreatmentHistory(
           patientData._id
         );
 
-        setTreatmentHistory(historyResponse.data || []);
+        const history = historyResponse.data || [];
 
+        setTreatmentHistory(history);
+
+        // Latest consultation is at index 0
+        const latestConsultation = history[0];
+
+        setPatient((prev) => ({
+          ...prev,
+          disease: latestConsultation?.diagnosis || "—",
+          doctor:
+            latestConsultation?.doctorId?.userId?.name || "—",
+        }));
+
+        // Check discharge status for admin and doctor
+        if (["admin", "doctor"].includes(currentUser?.role)) {
+          try {
+            const dischargeResponse = await fetchDischargedPatients();
+
+            const dischargeRecords = Array.isArray(dischargeResponse.data)
+              ? dischargeResponse.data
+              : [];
+
+            const alreadyDischarged = dischargeRecords.some((record) => {
+              const recordPatientId =
+                record.patientId?._id || record.patientId;
+
+              return (
+                String(recordPatientId) === String(patientData._id)
+              );
+            });
+
+            setIsDischarged(alreadyDischarged);
+          } catch (dischargeError) {
+            console.error(
+              "Unable to check discharge status:",
+              dischargeError
+            );
+          }
+        }
       } catch (err) {
         console.error("Patient details error:", err);
         setError("Unable to load patient details.");
@@ -86,11 +148,19 @@ export default function PatientDetails() {
   }, [id]);
 
   if (loading) {
-    return <div className="text-center py-20">Loading patient details...</div>;
+    return (
+      <div className="text-center py-20">
+        Loading patient details...
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-center py-20 text-rose-500">{error}</div>;
+    return (
+      <div className="text-center py-20 text-rose-500">
+        {error}
+      </div>
+    );
   }
 
   if (!patient) {
@@ -98,80 +168,159 @@ export default function PatientDetails() {
       <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-400">
         <span className="text-5xl">🔍</span>
         <p className="font-semibold">Patient not found</p>
-        <button onClick={() => navigate("/")} className="text-indigo-500 hover:underline text-sm">Back to patients</button>
+        <button
+          onClick={() => navigate("/")}
+          className="text-indigo-500 hover:underline text-sm"
+        >
+          Back to patients
+        </button>
       </div>
     );
   }
 
-  const initials = patient.name?.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-  const priorityCls = PRIORITY_STYLES[patient.priority] || PRIORITY_STYLES.Low;
+  const initials = patient.name
+    ?.split(" ")
+    .map(n => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  const priorityCls =
+    PRIORITY_STYLES[patient.priority] || PRIORITY_STYLES.Low;
 
   return (
     <div className="max-w-2xl mx-auto animate-fade-in space-y-5">
+
       {/* Hero card */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
-        {/* Top gradient banner */}
-        <div className={`h-24 bg-gradient-to-r ${avatarColor(patient.name)}`} />
 
-        {/* Avatar + name */}
+        <div
+          className={`h-24 bg-gradient-to-r ${avatarColor(patient.name)}`}
+        />
+
         <div className="px-6 pb-6">
           <div className="-mt-12 flex items-end gap-4">
-            <div className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${avatarColor(patient.name)} border-4 border-white dark:border-slate-900 flex items-center justify-center text-white text-3xl font-extrabold shadow-lg`}>
+
+            <div
+              className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${avatarColor(patient.name)} border-4 border-white dark:border-slate-900 flex items-center justify-center text-white text-3xl font-extrabold shadow-lg`}
+            >
               {initials}
             </div>
+
             <div className="pb-1">
-              <h1 className="text-xl font-bold text-slate-800 dark:text-white">{patient.name}</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{patient.gender || "—"} · Age {patient.age}</p>
+              <h1 className="text-xl font-bold text-slate-800 dark:text-white">
+                {patient.name}
+              </h1>
+
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {patient.gender || "—"} · Age {patient.age}
+              </p>
             </div>
+
             <div className="ml-auto pb-1">
-              <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${priorityCls}`}>
+              <span
+                className={`text-xs font-bold px-3 py-1.5 rounded-full ${priorityCls}`}
+              >
                 {patient.priority || "Low"} Priority
               </span>
             </div>
+
           </div>
         </div>
       </div>
 
       {/* Info grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Medical Info - PRIORITIZED */}
+
+        {/* Medical Info */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-indigo-500/20 dark:border-indigo-500/40 p-5 shadow-sm relative overflow-hidden">
+
           <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full -mr-8 -mt-8" />
+
           <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-            <span className="w-1.5 h-4 bg-indigo-500 rounded-full inline-block" /> Medical Overview
+            <span className="w-1.5 h-4 bg-indigo-500 rounded-full inline-block" />
+            Medical Overview
           </h2>
+
           <div className="space-y-1">
-            <InfoRow label="Primary Diagnosis" value={patient.disease} icon="🦠" />
-            <InfoRow label="Assigned Doctor" value={patient.doctor} icon="👨‍⚕️" />
-            <InfoRow label="Priority Level" value={patient.priority} icon="⚡" />
-            <InfoRow label="Patient ID" value={`#${patient.id}`} icon="🪪" />
+            <InfoRow
+              label="Primary Diagnosis"
+              value={patient.disease}
+              icon="🦠"
+            />
+
+            <InfoRow
+              label="Assigned Doctor"
+              value={patient.doctor}
+              icon="👨‍⚕️"
+            />
+
+            <InfoRow
+              label="Priority Level"
+              value={patient.priority}
+              icon="⚡"
+            />
+
+            <InfoRow
+              label="Patient ID"
+              value={`#${patient.id}`}
+              icon="🪪"
+            />
           </div>
         </div>
 
         {/* Personal Info */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-slate-400 rounded-full inline-block" /> Contact & Vital Info
+            <span className="w-1 h-4 bg-slate-400 rounded-full inline-block" />
+            Contact & Vital Info
           </h2>
-          <InfoRow label="Contact Number" value={patient.contact} icon="📞" />
-          <InfoRow label="Blood Group" value={patient.blood} icon="🩸" />
-          <InfoRow label="Gender" value={patient.gender} icon="👤" />
-          <InfoRow label="Admission Date" value={patient.date} icon="📅" />
+
+          <InfoRow
+            label="Contact Number"
+            value={patient.contact}
+            icon="📞"
+          />
+
+          <InfoRow
+            label="Blood Group"
+            value={patient.blood}
+            icon="🩸"
+          />
+
+          <InfoRow
+            label="Gender"
+            value={patient.gender}
+            icon="👤"
+          />
+
+          <InfoRow
+            label="Admission Date"
+            value={patient.date}
+            icon="📅"
+          />
         </div>
       </div>
 
       {/* Notes */}
       {patient.notes && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-            <span className="w-1 h-4 bg-amber-500 rounded-full inline-block" /> Clinical Notes
+            <span className="w-1 h-4 bg-amber-500 rounded-full inline-block" />
+            Clinical Notes
           </h2>
-          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{patient.notes}</p>
+
+          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+            {patient.notes}
+          </p>
         </div>
       )}
 
       {/* Treatment History */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+
         <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-4">
           🩺 Treatment History
         </h2>
@@ -187,10 +336,12 @@ export default function PatientDetails() {
                 key={item._id}
                 className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2"
               >
+
                 <div className="flex justify-between flex-wrap gap-2">
                   <p className="font-bold text-indigo-600 dark:text-indigo-400">
                     {item.diagnosis}
                   </p>
+
                   <span className="text-xs text-slate-400">
                     {new Date(item.consultationDate).toLocaleDateString()}
                   </span>
@@ -203,7 +354,9 @@ export default function PatientDetails() {
                 <p className="text-sm text-slate-600 dark:text-slate-300">
                   <strong>Medicines:</strong>{" "}
                   {item.medicines?.length
-                    ? item.medicines.map(m => `${m.name} (${m.dosage || "—"})`).join(", ")
+                    ? item.medicines
+                      .map(m => `${m.name} (${m.dosage || "—"})`)
+                      .join(", ")
                     : "—"}
                 </p>
 
@@ -215,27 +368,34 @@ export default function PatientDetails() {
                   <strong>Follow-up:</strong>{" "}
                   {item.followUpRecommendation || "Not required"}
                 </p>
+
               </div>
             ))}
           </div>
         )}
       </div>
 
-
       {/* Actions */}
       <div className="flex gap-3">
+
         <button
           onClick={() => navigate("/")}
           className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition-all"
         >
           ← Back
         </button>
-        <button
-          onClick={() => navigate(`/leave/${patient.id}`)}
-          className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow hover:shadow-rose-500/30 hover:scale-105 active:scale-95 transition-all"
-        >
-          🚪 Discharge Patient
-        </button>
+
+        {/* Show discharge button only for active patients */}
+        {["admin", "doctor"].includes(currentUser?.role) &&
+          isDischarged === false && (
+            <button
+              onClick={() => navigate(`/leave/${patient.id}`)}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow hover:shadow-rose-500/30 hover:scale-105 active:scale-95 transition-all"
+            >
+              🚪 Discharge Patient
+            </button>
+          )}
+
       </div>
     </div>
   );
