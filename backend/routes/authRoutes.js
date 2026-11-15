@@ -7,10 +7,20 @@ import authorizeRoles from "../middleware/authorizeRoles.js";
 import Doctor from "../models/Doctor.js";
 import mongoose from "mongoose";
 import Patient from "../models/Patient.js";
+import validate from "../middleware/validate.js";
 
 const router = express.Router();
 
-router.post("/register", async (req, res) => {
+router.post(
+    "/register",
+    validate([
+        { field: "name", required: true },
+        { field: "email", required: true, type: "email" },
+        { field: "password", required: true },
+        { field: "phone", type: "phone" },
+        { field: "dateOfBirth", type: "date" }
+    ]),
+    async (req, res) => {
     try {
         const {
             name,
@@ -35,7 +45,8 @@ router.post("/register", async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Name, email and password are required"
-            });
+                }
+            );
         }
 
         if (password.length < 8) {
@@ -298,79 +309,95 @@ router.post("/register", async (req, res) => {
 });
 
 
-router.post("/login", async (req, res) => {
-    try {
-        const { email, password } = req.body;
-
-        if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: "Email and password are required"
-            });
+router.post(
+    "/login",
+    validate([
+        {
+            field: "email",
+            required: true,
+            type: "email",
+            message: "A valid email is required"
+        },
+        {
+            field: "password",
+            required: true,
+            message: "Password is required"
         }
+    ]),
+    async (req, res) => {
+        try {
+            const { email, password } = req.body;
 
-        const user = await User.findOne({
-            email: email.toLowerCase().trim()
-        }).select("+password");
-
-        if (!user) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid email or password"
-            });
-        }
-
-        const isPasswordCorrect = await bcrypt.compare(
-            password,
-            user.password
-        );
-
-        if (!isPasswordCorrect) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid email or password"
-            });
-        }
-
-        if (user.role === "doctor" && !user.isVerified) {
-            return res.status(403).json({
-                success: false,
-                message: "Doctor account is awaiting verification"
-            });
-        }
-
-        const token = jwt.sign(
-            {
-                userId: user._id.toString(),
-                role: user.role
-            },
-            process.env.JWT_SECRET,
-            {
-                expiresIn: process.env.JWT_EXPIRES_IN || "1d"
+            if (!email || !password) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Email and password are required"
+                });
             }
-        );
 
-        res.status(200).json({
-            success: true,
-            message: "Login successful",
-            token,
-            user: {
-                id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                isVerified: user.isVerified
+            const user = await User.findOne({
+                email: email.toLowerCase().trim()
+            }).select("+password");
+
+            if (!user) {
+                return res.status(401).json({
+                    success: false,
+                    message: "Invalid email or password"
+                });
             }
-        });
-    } catch (error) {
-        console.error("Login error:", error.message);
 
-        res.status(500).json({
-            success: false,
-            message: "Unable to log in"
-        });
+            const isPasswordCorrect = await bcrypt.compare(
+                password,
+                user.password
+            );
+
+            if (!isPasswordCorrect) {
+                return res.status(401).json({
+                    success: false,
+                    message: "Invalid email or password"
+                });
+            }
+
+            if (user.role === "doctor" && !user.isVerified) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Doctor account is awaiting verification"
+                });
+            }
+
+            const token = jwt.sign(
+                {
+                    userId: user._id.toString(),
+                    role: user.role
+                },
+                process.env.JWT_SECRET,
+                {
+                    expiresIn: process.env.JWT_EXPIRES_IN || "1d"
+                }
+            );
+
+            res.status(200).json({
+                success: true,
+                message: "Login successful",
+                token,
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    role: user.role,
+                    isVerified: user.isVerified
+                }
+            });
+        } catch (error) {
+            console.error("Login error:", error.message);
+
+            res.status(500).json({
+                success: false,
+                message: "Unable to log in"
+            });
+        }
     }
-});
+);
 
 
 router.get("/me", protect, (req, res) => {

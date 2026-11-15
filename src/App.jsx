@@ -23,6 +23,7 @@ import BookAppointment from "./pages/BookAppointment";
 import DoctorVerification from "./pages/DoctorVerification";
 import AdminBookAppointment from "./pages/AdminBookAppointment";
 import AllDoctors from "./pages/AllDoctors";
+import DoctorAvailability from "./pages/DoctorAvailability";
 
 // import { useEffect } from "react";
 // import { fetchApiPatients } from "./services/apiService";
@@ -33,6 +34,7 @@ const NAV_SECTIONS = [
     items: [
       { path: "/dashboard", icon: "📊", label: "Dashboard" },
       { path: "/activity", icon: "🕒", label: "Activity", roles: ["admin", "doctor"] },
+      { path: "/doctor-availability", icon: "🗓️", label: "Availability", roles: ["doctor"] },
     ],
   },
   {
@@ -238,6 +240,14 @@ function Layout() {
                   element={
                     <ProtectedRoute allowedRoles={["patient"]}>
                       <MyProfile />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/doctor-availability"
+                  element={
+                    <ProtectedRoute allowedRoles={["doctor"]}>
+                      <DoctorAvailability />
                     </ProtectedRoute>
                   }
                 />

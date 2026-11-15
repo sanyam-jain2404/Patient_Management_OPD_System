@@ -1,8 +1,9 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { useToast } from "../components/Toast";
+import { useToast } from "../components/ToastContext";
 import { PRESCRIPTIONS } from "../data/prescriptions";
 import { fetchApiPatientById, createDischarge } from "../services/apiService";
+import { getIndiaDateString } from "../utils/date";
 
 
 const inputCls = "w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none transition-all";
@@ -51,7 +52,7 @@ export default function LeavePatient() {
     };
 
     loadPatient();
-  }, [id]);
+  }, [id, toast]);
 
   // When disease is selected, auto-fill prescription
   const handleDiseaseChange = (disease) => {
@@ -75,7 +76,7 @@ export default function LeavePatient() {
       const record = {
         ...patient,
         status: "Discharged",
-        dischargeDate: new Date().toLocaleDateString(),
+        dischargeDate: getIndiaDateString(),
         dischargeNotes: doctorNotes,
         vitals: { bp, temp, pulse, weight },
         prescribedDisease: selDisease,
@@ -157,7 +158,7 @@ export default function LeavePatient() {
 
           <div class="footer">
             <span>Patient ID: #${dischargedPt.id}</span>
-            <span>Generated: ${new Date().toLocaleString()}</span>
+            <span>Generated: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</span>
           </div>
           <script>window.print();</script>
         </body>

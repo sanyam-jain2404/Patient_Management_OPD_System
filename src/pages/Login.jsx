@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useToast } from "../components/Toast";
+import { useToast } from "../components/ToastContext";
 import { login } from "../services/apiService";
 
 export default function Login() {

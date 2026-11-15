@@ -26,25 +26,12 @@ export default function MyProfile() {
     const [error, setError] = useState("");
     const [history, setHistory] = useState([]);
     const [historyLoading, setHistoryLoading] = useState(true);
+    const [historyPage, setHistoryPage] = useState(1);
+    const [historyTotalPages, setHistoryTotalPages] = useState(1);
+    const [historyTotal, setHistoryTotal] = useState(0);
 
     useEffect(() => {
-
         const loadProfile = async () => {
-            const response = await fetchMyPatientProfile();
-            setPatient(response.data);
-
-            try {
-                const historyResponse = await fetchPatientTreatmentHistory(
-                    response.data._id
-                );
-
-                setHistory(historyResponse.data || []);
-            } catch (historyError) {
-                console.error("Treatment history error:", historyError);
-                setHistory([]);
-            } finally {
-                setHistoryLoading(false);
-            }
             try {
                 setLoading(true);
                 setError("");
@@ -54,6 +41,7 @@ export default function MyProfile() {
             } catch (err) {
                 console.error("Profile loading error:", err);
                 setError("Unable to load your profile. Please try again.");
+                setPatient(null);
             } finally {
                 setLoading(false);
             }
@@ -61,6 +49,32 @@ export default function MyProfile() {
 
         loadProfile();
     }, []);
+
+    useEffect(() => {
+        if (!patient?._id) return;
+
+        const loadHistory = async () => {
+            try {
+                setHistoryLoading(true);
+                const historyResponse = await fetchPatientTreatmentHistory(
+                    patient._id,
+                    { page: historyPage, limit: 5 }
+                );
+                setHistory(historyResponse.data || []);
+                setHistoryTotal(historyResponse.total || 0);
+                setHistoryTotalPages(historyResponse.totalPages || 1);
+            } catch (historyError) {
+                console.error("Treatment history error:", historyError);
+                setHistory([]);
+                setHistoryTotal(0);
+                setHistoryTotalPages(1);
+            } finally {
+                setHistoryLoading(false);
+            }
+        };
+
+        loadHistory();
+    }, [patient, historyPage]);
 
     if (loading) {
         return (
@@ -98,6 +112,7 @@ export default function MyProfile() {
             day: "2-digit",
             month: "long",
             year: "numeric",
+            timeZone: "Asia/Kolkata",
         })
         : "Not provided";
 
@@ -236,7 +251,7 @@ export default function MyProfile() {
                     </div>
 
                     <span className="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">
-                        {history.length} Records
+                        {historyTotal} Records
                     </span>
                 </div>
 
@@ -277,7 +292,9 @@ export default function MyProfile() {
 
                                     <span className="text-xs font-medium text-indigo-600 dark:text-indigo-300">
                                         {item.consultationDate
-                                            ? new Date(item.consultationDate).toLocaleDateString("en-IN")
+                                            ? new Date(item.consultationDate).toLocaleDateString("en-IN", {
+                                                timeZone: "Asia/Kolkata"
+                                            })
                                             : "Date unavailable"}
                                     </span>
                                 </div>
@@ -369,13 +386,38 @@ export default function MyProfile() {
 
                                         {item.followUpDate && (
                                             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                                                Date: {new Date(item.followUpDate).toLocaleDateString("en-IN")}
+                                                Date: {new Date(item.followUpDate).toLocaleDateString("en-IN", {
+                                                    timeZone: "Asia/Kolkata"
+                                                })}
                                             </p>
                                         )}
                                     </div>
                                 )}
                             </div>
                         ))}
+                        {historyTotalPages > 1 && (
+                            <div className="flex items-center justify-between pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setHistoryPage((page) => page - 1)}
+                                    disabled={historyPage === 1 || historyLoading}
+                                    className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-40"
+                                >
+                                    Previous
+                                </button>
+                                <span className="text-xs text-slate-500">
+                                    Page {historyPage} of {historyTotalPages}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setHistoryPage((page) => page + 1)}
+                                    disabled={historyPage === historyTotalPages || historyLoading}
+                                    className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-40"
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

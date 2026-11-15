@@ -2,6 +2,7 @@ import express from "express";
 import Department from "../models/Department.js";
 import protect from "../middleware/authMiddleware.js";
 import authorizeRoles from "../middleware/authorizeRoles.js";
+import validate from "../middleware/validate.js";
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ router.get("/", protect, async (req, res) => {
             count: departments.length,
             data: departments
         });
-    } catch (error) {
+    } catch {
         res.status(500).json({
             success: false,
             message: "Unable to fetch departments"
@@ -30,21 +31,27 @@ router.get("/", protect, async (req, res) => {
  * POST /api/departments
  * Admin creates a new department.
  */
-router.post("/", protect, authorizeRoles("admin"), async (req, res) => {
+router.post(
+    "/",
+    protect,
+    authorizeRoles("admin"),
+    validate([{ field: "name", required: true }]),
+    async (req, res) => {
     try {
         const { name, description } = req.body;
         if (!name) {
             return res.status(400).json({
                 success: false,
                 message: "Department name is required"
-            });
+                }
+            );
         }
         const department = await Department.create({ name, description });
         res.status(201).json({
             success: true,
             data: department
         });
-    } catch (error) {
+    } catch {
         res.status(500).json({
             success: false,
             message: "Unable to create department"

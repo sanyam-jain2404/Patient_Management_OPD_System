@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useToast } from "../components/Toast";
+import { useCallback, useEffect, useState } from "react";
+import { useToast } from "../components/ToastContext";
 import { apiRequest } from "../services/apiService";
 
 export default function DoctorVerification() {
@@ -7,16 +7,16 @@ export default function DoctorVerification() {
   const [loading, setLoading] = useState(true);
   const toast = useToast();
 
-  const loadPending = async () => {
+  const loadPending = useCallback(async () => {
     try {
       const res = await apiRequest("/admin/pending-doctors");
       setDoctors(res.data);
-    } catch (err) {
+    } catch {
       toast("Failed to load pending doctors", "error");
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   const verify = async (id) => {
     try {
@@ -30,7 +30,7 @@ export default function DoctorVerification() {
 
   useEffect(() => {
     loadPending();
-  }, []);
+  }, [loadPending]);
 
   return (
     <div className="p-6 animate-fade-in max-w-4xl mx-auto">

@@ -12,14 +12,30 @@ import consultationRoutes from "./routes/consultationRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
 import dischargeRoutes from "./routes/dischargeRoutes.js";
 import followUpRoutes from "./routes/followUpRoutes.js";
+import settingRoutes from "./routes/settingRoutes.js";
 import helmet from "helmet";
+import { apiLimiter, authLimiter } from "./middleware/rateLimiter.js";
 
 dotenv.config();
 const app = express();
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+
+        return callback(new Error("Origin is not allowed by CORS"));
+    }
+}));
 app.use(express.json());
-app.use("/api/auth", authRoutes);
+app.use("/api", apiLimiter);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/patients", patientRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/appointments", appointmentRoutes);
@@ -29,6 +45,7 @@ app.use("/api/consultations", consultationRoutes);
 app.use("/api/activities", activityRoutes);
 app.use("/api/discharges", dischargeRoutes);
 app.use("/api/follow-ups", followUpRoutes);
+app.use("/api/settings", settingRoutes);
 app.get("/", (req, res) => {
     res.status(200).json({
         success: true,

@@ -133,7 +133,7 @@ router.get("/", protect, authorizeRoles("admin", "doctor"), async (req, res) => 
             .sort({ dischargeDate: -1 });
 
         res.json({ success: true, count: records.length, data: records });
-    } catch (error) {
+    } catch {
         res.status(500).json({ success: false, message: "Unable to fetch discharge records" });
     }
 });

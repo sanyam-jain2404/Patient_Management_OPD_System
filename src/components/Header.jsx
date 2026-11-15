@@ -25,6 +25,7 @@ export default function Header() {
 
   const now = new Date().toLocaleDateString("en-IN", {
     weekday: "short", day: "numeric", month: "short", year: "numeric",
+    timeZone: "Asia/Kolkata",
   });
 
   return (

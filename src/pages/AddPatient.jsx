@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useToast } from "../components/Toast";
+import { useToast } from "../components/ToastContext";
 import {
   createApiPatient,
   fetchApiPatients,
@@ -54,7 +54,11 @@ export default function AddPatient() {
     try {
       setLookupLoading(true);
 
-      const response = await fetchApiPatients();
+      const response = await fetchApiPatients({
+        search: form.contact.trim(),
+        page: 1,
+        limit: 100
+      });
       const patients = response.data || [];
 
       const found = patients.find(

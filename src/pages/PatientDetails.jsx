@@ -59,6 +59,8 @@ export default function PatientDetails() {
   const [error, setError] = useState("");
   const [treatmentHistory, setTreatmentHistory] = useState([]);
   const [isDischarged, setIsDischarged] = useState(null);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotalPages, setHistoryTotalPages] = useState(1);
 
   const currentUser = JSON.parse(
     localStorage.getItem("user") || "{}"
@@ -93,22 +95,26 @@ export default function PatientDetails() {
 
         // Load treatment history
         const historyResponse = await fetchPatientTreatmentHistory(
-          patientData._id
+          patientData._id,
+          { page: historyPage, limit: 5 }
         );
 
         const history = historyResponse.data || [];
 
         setTreatmentHistory(history);
+        setHistoryTotalPages(historyResponse.totalPages || 1);
 
-        // Latest consultation is at index 0
-        const latestConsultation = history[0];
+        if (historyPage === 1) {
+          const latestConsultation = history[0];
 
-        setPatient((prev) => ({
-          ...prev,
-          disease: latestConsultation?.diagnosis || "—",
-          doctor:
-            latestConsultation?.doctorId?.userId?.name || "—",
-        }));
+          setPatient((prev) => ({
+            ...prev,
+            disease: latestConsultation?.diagnosis || "—",
+            doctor:
+              latestConsultation?.doctorId?.userId?.name || "—",
+            notes: latestConsultation?.notes || latestConsultation?.doctorNotes || "",
+          }));
+        }
 
         // Check discharge status for admin and doctor
         if (["admin", "doctor"].includes(currentUser?.role)) {
@@ -145,7 +151,7 @@ export default function PatientDetails() {
     };
 
     loadPatient();
-  }, [id]);
+  }, [id, currentUser?.role, historyPage]);
 
   if (loading) {
     return (
@@ -361,7 +367,8 @@ export default function PatientDetails() {
                 </p>
 
                 <p className="text-sm text-slate-600 dark:text-slate-300">
-                  <strong>Doctor Notes:</strong> {item.notes || "—"}
+                  <strong>Doctor Notes:</strong>{" "}
+                  {item.notes || item.doctorNotes || "—"}
                 </p>
 
                 <p className="text-sm text-slate-600 dark:text-slate-300">
@@ -371,6 +378,29 @@ export default function PatientDetails() {
 
               </div>
             ))}
+            {historyTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setHistoryPage((page) => page - 1)}
+                  disabled={historyPage === 1 || loading}
+                  className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-slate-500">
+                  Page {historyPage} of {historyTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setHistoryPage((page) => page + 1)}
+                  disabled={historyPage === historyTotalPages || loading}
+                  className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -7,6 +7,7 @@ import Appointment from "../models/Appointment.js";
 import Doctor from "../models/Doctor.js";
 import Consultation from "../models/Consultation.js";
 import Discharge from "../models/Discharge.js";
+import validate from "../middleware/validate.js";
 
 
 const router = express.Router();
@@ -33,7 +34,7 @@ router.get(
                 data: patient
             });
 
-        } catch (error) {
+        } catch {
             res.status(500).json({
                 success: false,
                 message: "Unable to fetch patient profile"
@@ -254,16 +255,50 @@ router.get(
     authorizeRoles("admin"),
     async (req, res) => {
         try {
-            const patients = await Patient.find().sort({
-                createdAt: -1
-            });
+            const { page: pageParam, limit: limitParam, search } = req.query;
+            const hasPagination = pageParam !== undefined || limitParam !== undefined;
+            const page = pageParam === undefined ? 1 : Number.parseInt(pageParam, 10);
+            const limit = limitParam === undefined ? 10 : Number.parseInt(limitParam, 10);
+
+            if (
+                (hasPagination && (!Number.isInteger(page) || page < 1)) ||
+                (hasPagination && (!Number.isInteger(limit) || limit < 1 || limit > 100))
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Page must be at least 1 and limit must be between 1 and 100"
+                });
+            }
+
+            const query = {};
+            if (search?.trim()) {
+                const searchPattern = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                query.$or = [
+                    { name: { $regex: searchPattern, $options: "i" } },
+                    { phone: { $regex: searchPattern, $options: "i" } },
+                    { email: { $regex: searchPattern, $options: "i" } }
+                ];
+            }
+
+            const total = await Patient.countDocuments(query);
+            const patientQuery = Patient.find(query).sort({ createdAt: -1 });
+
+            if (hasPagination) {
+                patientQuery.skip((page - 1) * limit).limit(limit);
+            }
+
+            const patients = await patientQuery;
 
             res.status(200).json({
                 success: true,
-                count: patients.length,
+                count: total,
+                total,
+                currentPage: hasPagination ? page : 1,
+                limit: hasPagination ? limit : total,
+                totalPages: hasPagination ? Math.ceil(total / limit) : 1,
                 data: patients
             });
-        } catch (error) {
+        } catch {
             res.status(500).json({
                 success: false,
                 message: "Unable to fetch patients"
@@ -276,6 +311,12 @@ router.post(
     "/",
     protect,
     authorizeRoles("admin"),
+    validate([
+        { field: "name", required: true },
+        { field: "age", required: true, type: "number", min: 0, max: 150 },
+        { field: "gender", required: true },
+        { field: "phone", required: true, type: "phone" }
+    ]),
     async (req, res) => {
         try {
             const {
@@ -350,6 +391,10 @@ router.put(
     "/:id",
     protect,
     authorizeRoles("admin"),
+    validate([
+        { field: "age", type: "number", min: 0, max: 150 },
+        { field: "phone", type: "phone" }
+    ]),
     async (req, res) => {
         try {
             const { id } = req.params;

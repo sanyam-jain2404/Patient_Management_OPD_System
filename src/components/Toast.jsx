@@ -1,6 +1,5 @@
-import { createContext, useContext, useState, useCallback } from "react";
-
-const ToastCtx = createContext(null);
+import { useState, useCallback } from "react";
+import { ToastCtx } from "./ToastContext";
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
@@ -24,7 +23,6 @@ export function ToastProvider({ children }) {
     </ToastCtx.Provider>
   );
 }
-
 const variants = {
   success: { border: "border-emerald-500/40", bg: "bg-emerald-950/95", icon: "✅", bar: "bg-emerald-400" },
   error:   { border: "border-rose-500/40",    bg: "bg-rose-950/95",    icon: "❌", bar: "bg-rose-400"    },
@@ -45,5 +43,3 @@ function ToastItem({ toast, onRemove }) {
     </div>
   );
 }
-
-export const useToast = () => useContext(ToastCtx);

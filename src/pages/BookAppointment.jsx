@@ -1,12 +1,13 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useToast } from "../components/Toast";
+import { useToast } from "../components/ToastContext";
 import {
   fetchDepartments,
   bookAppointment,
   fetchMyFollowUps,
 } from "../services/apiService";
+import { getIndiaDateString } from "../utils/date";
 
 function Field({ label, children, required }) {
   return (
@@ -40,7 +41,7 @@ export default function BookAppointment() {
 
   const [form, setForm] = useState({
     departmentId: "",
-    date: new Date().toISOString().slice(0, 10),
+    date: getIndiaDateString(),
     time: "09:00",
     symptoms: "",
     reason: "",
@@ -63,7 +64,7 @@ export default function BookAppointment() {
             departmentId: prev.departmentId || data.data[0]._id,
           }));
         }
-      } catch (err) {
+      } catch {
         toast("Failed to load departments", "error");
       }
     };
@@ -274,7 +275,7 @@ export default function BookAppointment() {
                   ...prev,
                   symptoms: "",
                   reason: "",
-                  date: new Date().toISOString().slice(0, 10),
+                  date: getIndiaDateString(),
                   time: "09:00",
                 }));
               }}
@@ -337,7 +338,9 @@ export default function BookAppointment() {
               {followUps.map((item) => (
                 <option key={item._id} value={item._id}>
                   {item.instructions} -{" "}
-                  {new Date(item.dueDate).toLocaleDateString("en-IN")}
+                  {new Date(item.dueDate).toLocaleDateString("en-IN", {
+                    timeZone: "Asia/Kolkata"
+                  })}
                 </option>
               ))}
             </select>
@@ -392,7 +395,7 @@ export default function BookAppointment() {
               type="date"
               name="date"
               required
-              min={new Date().toISOString().slice(0, 10)}
+              min={getIndiaDateString()}
               value={form.date}
               onChange={handleChange}
               className={inputCls}

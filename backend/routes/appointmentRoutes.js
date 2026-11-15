@@ -337,7 +337,26 @@ router.get("/", protect, async (req, res) => {
     try {
         let query = {};
 
-        const { date, status, departmentId } = req.query;
+        const {
+            date,
+            status,
+            departmentId,
+            page: pageParam,
+            limit: limitParam
+        } = req.query;
+        const hasPagination = pageParam !== undefined || limitParam !== undefined;
+        const page = pageParam === undefined ? 1 : Number.parseInt(pageParam, 10);
+        const limit = limitParam === undefined ? 10 : Number.parseInt(limitParam, 10);
+
+        if (
+            (hasPagination && (!Number.isInteger(page) || page < 1)) ||
+            (hasPagination && (!Number.isInteger(limit) || limit < 1 || limit > 100))
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Page must be at least 1 and limit must be between 1 and 100"
+            });
+        }
 
         if (date) query.appointmentDate = date;
         if (status) query.status = status;
@@ -380,7 +399,8 @@ router.get("/", protect, async (req, res) => {
             });
         }
 
-        const appointments = await Appointment.find(query)
+        const total = await Appointment.countDocuments(query);
+        const appointmentQuery = Appointment.find(query)
             .populate("patientId", "name age gender phone blood")
             .populate({
                 path: "doctorId",
@@ -395,9 +415,19 @@ router.get("/", protect, async (req, res) => {
                 tokenNumber: 1
             });
 
+        if (hasPagination) {
+            appointmentQuery.skip((page - 1) * limit).limit(limit);
+        }
+
+        const appointments = await appointmentQuery;
+
         return res.status(200).json({
             success: true,
-            count: appointments.length,
+            count: total,
+            total,
+            currentPage: hasPagination ? page : 1,
+            limit: hasPagination ? limit : total,
+            totalPages: hasPagination ? Math.ceil(total / limit) : 1,
             data: appointments
         });
 

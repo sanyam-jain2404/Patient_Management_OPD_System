@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useToast } from "../components/Toast";
+import { useToast } from "../components/ToastContext";
 import { fetchAppointments, updateAppointmentStatus, recordConsultation, callNextPatient, fetchPatientTreatmentHistory } from "../services/apiService";
+import { getIndiaDateString } from "../utils/date";
 
 
 function StatCard({ title, value, icon, subtext, colorClass }) {
@@ -171,11 +172,9 @@ function PatientDashboard({ appointments, onCancel }) {
 }
 
 
-function DoctorDashboard({ appointments, onStatusUpdate, onCallNext, onRefresh }) {
-  const [activeConsultation, setActiveConsultation] = useState(null);
-  const today = new Date().toLocaleDateString("en-CA", {
-    timeZone: "Asia/Kolkata"
-  });
+function DoctorDashboard({ appointments, onStatusUpdate, onRefresh }) {
+  const [, setActiveConsultation] = useState(null);
+  const today = getIndiaDateString();
 
   const [selectedDate, setSelectedDate] = useState(today);
 
@@ -221,7 +220,7 @@ function DoctorDashboard({ appointments, onStatusUpdate, onCallNext, onRefresh }
         const result = await fetchPatientTreatmentHistory(currentPatientId);
 
         setMedicalHistory(result.data || []);
-      } catch (error) {
+      } catch {
         setHistoryError("Unable to load previous medical history.");
       } finally {
         setHistoryLoading(false);
@@ -396,7 +395,9 @@ function DoctorDashboard({ appointments, onStatusUpdate, onCallNext, onRefresh }
                           </h4>
 
                           <span className="text-xs text-slate-500">
-                            {new Date(record.consultationDate).toLocaleDateString("en-IN")}
+                            {new Date(record.consultationDate).toLocaleDateString("en-IN", {
+                              timeZone: "Asia/Kolkata"
+                            })}
                           </span>
                         </div>
 
@@ -444,7 +445,9 @@ function DoctorDashboard({ appointments, onStatusUpdate, onCallNext, onRefresh }
 
                         {record.followUpDate && (
                           <p className="text-xs text-indigo-500">
-                            Follow-up: {new Date(record.followUpDate).toLocaleDateString("en-IN")}
+                            Follow-up: {new Date(record.followUpDate).toLocaleDateString("en-IN", {
+                              timeZone: "Asia/Kolkata"
+                            })}
                           </p>
                         )}
                       </div>
@@ -562,7 +565,7 @@ function DoctorDashboard({ appointments, onStatusUpdate, onCallNext, onRefresh }
 
 function AdminDashboard({ appointments }) {
   const navigate = useNavigate();
-  const today = appointments.filter(a => a.appointmentDate === new Date().toISOString().slice(0, 10));
+  const today = appointments.filter(a => a.appointmentDate === getIndiaDateString());
 
   const stats = {
     total: appointments.length,
@@ -629,19 +632,18 @@ export default function Dashboard() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
-  const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const data = await fetchAppointments();
       setAppointments(data.data);
-    } catch (err) {
+    } catch {
       toast("Failed to load dashboard data", "error");
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   const handleStatusUpdate = async (apptId, status) => {
     try {
@@ -652,21 +654,9 @@ export default function Dashboard() {
       toast(err.message, "error");
     }
   };
-  const handleCallNext = async () => {
-    try {
-      const result = await callNextPatient();
-
-      toast(result.message, "success");
-
-      await loadData();
-    } catch (err) {
-      toast(err.message, "error");
-    }
-  };
-
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   if (loading) {
     return (
@@ -684,8 +674,8 @@ export default function Dashboard() {
           <p className="text-sm text-slate-500 dark:text-slate-400">Welcome back, <span className="font-bold text-indigo-500">{user.name}</span></p>
         </div>
         <div className="text-right hidden sm:block">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{new Date().toLocaleDateString('en-IN', { weekday: 'long' })}</p>
-          <p className="text-sm font-bold text-slate-800 dark:text-white">{new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{new Date().toLocaleDateString('en-IN', { weekday: 'long', timeZone: 'Asia/Kolkata' })}</p>
+          <p className="text-sm font-bold text-slate-800 dark:text-white">{new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' })}</p>
         </div>
       </div>
 
@@ -694,7 +684,6 @@ export default function Dashboard() {
         <DoctorDashboard
           appointments={appointments}
           onStatusUpdate={handleStatusUpdate}
-          onCallNext={handleCallNext}
           onRefresh={loadData}
         />
       )}

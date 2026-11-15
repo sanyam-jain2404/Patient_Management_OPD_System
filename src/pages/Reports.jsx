@@ -1,5 +1,9 @@
 import { useState, useEffect } from "react";
-import { useToast } from "../components/Toast";
+import { useToast } from "../components/ToastContext";
+import {
+  fetchSystemSettings,
+  updateSystemSettings
+} from "../services/apiService";
 
 const DEFAULT_SETTINGS = {
   hospitalName: "City OPD Clinic",
@@ -18,30 +22,44 @@ const DEFAULT_SETTINGS = {
   ],
 };
 
-function loadSettings() {
-  try {
-    return JSON.parse(localStorage.getItem("opdSettings")) || DEFAULT_SETTINGS;
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
-
 export default function Settings() {
   const toast = useToast();
-  const [settings,   setSettings]   = useState(loadSettings);
+  const [settings,   setSettings]   = useState(DEFAULT_SETTINGS);
   const [newDoctor,  setNewDoctor]   = useState("");
   const [saved,      setSaved]       = useState(false);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState("");
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const response = await fetchSystemSettings();
+        setSettings({ ...DEFAULT_SETTINGS, ...response.data });
+      } catch (loadError) {
+        console.error("Settings loading error:", loadError);
+        setError(loadError.message || "Unable to load settings.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSettings();
+  }, []);
 
   const handleChange = (key, value) => {
     setSettings(prev => ({ ...prev, [key]: value }));
     setSaved(false);
   };
 
-  const handleSave = () => {
-    localStorage.setItem("opdSettings", JSON.stringify(settings));
-    window.dispatchEvent(new Event("storage"));
-    setSaved(true);
-    toast("Settings saved successfully!", "success");
+  const handleSave = async () => {
+    try {
+      await updateSystemSettings(settings);
+      setSaved(true);
+      toast("Settings saved successfully!", "success");
+    } catch (saveError) {
+      console.error("Settings save error:", saveError);
+      toast(saveError.message || "Unable to save settings.", "error");
+    }
   };
 
   const addDoctor = () => {
@@ -68,6 +86,21 @@ export default function Settings() {
   };
 
   const inputCls = "w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all";
+
+  if (loading) {
+    return <div className="py-24 text-center text-slate-500">Loading settings...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="py-24 text-center space-y-4">
+        <p className="text-rose-500">{error}</p>
+        <button onClick={() => window.location.reload()} className="rounded-xl bg-indigo-600 px-5 py-2 text-white">
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto animate-fade-in space-y-6">

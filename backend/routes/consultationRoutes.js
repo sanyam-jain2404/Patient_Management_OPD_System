@@ -22,7 +22,8 @@ router.post("/", protect, authorizeRoles("doctor"), async (req, res) => {
             notes,
             medicines,
             followUpRecommendation,
-            followUpDate
+            followUpDate,
+            doctorNotes
         } = req.body;
 
         // Basic validation
@@ -153,7 +154,7 @@ router.post("/", protect, authorizeRoles("doctor"), async (req, res) => {
                     symptoms: appointment.symptoms || "",
                     diagnosis: diagnosis.trim(),
                     treatment: treatment?.trim() || "",
-                    notes: notes?.trim() || "",
+                    notes: (notes ?? doctorNotes)?.trim() || "",
                     medicines: cleanMedicines.map(medicine => ({
                         name: medicine.name.trim(),
                         dosage: medicine.dosage || "",
@@ -336,10 +337,30 @@ router.get(
                 }
             }
 
-            const consultations = await Consultation.find({
+            const {
+                page: pageParam,
+                limit: limitParam
+            } = req.query;
+            const hasPagination = pageParam !== undefined || limitParam !== undefined;
+            const page = pageParam === undefined ? 1 : Number.parseInt(pageParam, 10);
+            const limit = limitParam === undefined ? 10 : Number.parseInt(limitParam, 10);
+
+            if (
+                (hasPagination && (!Number.isInteger(page) || page < 1)) ||
+                (hasPagination && (!Number.isInteger(limit) || limit < 1 || limit > 100))
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Page must be at least 1 and limit must be between 1 and 100"
+                });
+            }
+
+            const query = {
                 patientId,
                 isDeleted: false
-            })
+            };
+            const total = await Consultation.countDocuments(query);
+            const consultationQuery = Consultation.find(query)
                 .populate({
                     path: "doctorId",
                     populate: {
@@ -350,9 +371,19 @@ router.get(
                 .populate("departmentId", "name")
                 .sort({ consultationDate: -1 });
 
+            if (hasPagination) {
+                consultationQuery.skip((page - 1) * limit).limit(limit);
+            }
+
+            const consultations = await consultationQuery;
+
             return res.status(200).json({
                 success: true,
-                count: consultations.length,
+                count: total,
+                total,
+                currentPage: hasPagination ? page : 1,
+                limit: hasPagination ? limit : total,
+                totalPages: hasPagination ? Math.ceil(total / limit) : 1,
                 data: consultations
             });
 

@@ -16,7 +16,8 @@ function timeAgo(dateStr) {
 
   return d.toLocaleDateString("en-IN", {
     day: "numeric",
-    month: "short"
+    month: "short",
+    timeZone: "Asia/Kolkata"
   });
 }
 

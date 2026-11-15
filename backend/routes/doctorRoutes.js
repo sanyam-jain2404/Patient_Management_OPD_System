@@ -13,15 +13,44 @@ const router = express.Router();
  */
 router.get("/", protect, async (req, res) => {
     try {
-        const { departmentId, specialization } = req.query;
+        const {
+            departmentId,
+            specialization,
+            search,
+            page: pageParam,
+            limit: limitParam
+        } = req.query;
+        const hasPagination = pageParam !== undefined || limitParam !== undefined;
+        const page = pageParam === undefined ? 1 : Number.parseInt(pageParam, 10);
+        const limit = limitParam === undefined ? 10 : Number.parseInt(limitParam, 10);
+
+        if (
+            (hasPagination && (!Number.isInteger(page) || page < 1)) ||
+            (hasPagination && (!Number.isInteger(limit) || limit < 1 || limit > 100))
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Page must be at least 1 and limit must be between 1 and 100"
+            });
+        }
 
         // Find verified doctor users first
-        const verifiedUsers = await User.find({
+        const verifiedUserQuery = {
             role: "doctor",
             isVerified: true
-        }).select("_id");
-
+        };
+        const verifiedUsers = await User.find(verifiedUserQuery).select("_id");
         const verifiedUserIds = verifiedUsers.map(user => user._id);
+
+        const userSearchIds = search?.trim()
+            ? (await User.find({
+                ...verifiedUserQuery,
+                $or: [
+                    { name: { $regex: search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" } },
+                    { email: { $regex: search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" } }
+                ]
+            }).select("_id")).map(user => user._id)
+            : [];
 
         // Find doctor profiles belonging to verified users
         let query = {
@@ -36,7 +65,16 @@ router.get("/", protect, async (req, res) => {
             query.specialization = specialization;
         }
 
-        const doctors = await Doctor.find(query)
+        if (search?.trim()) {
+            const searchPattern = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            query.$or = [
+                { userId: { $in: userSearchIds } },
+                { specialization: { $regex: searchPattern, $options: "i" } }
+            ];
+        }
+
+        const total = await Doctor.countDocuments(query);
+        const doctorQuery = Doctor.find(query)
             .populate({
                 path: "userId",
                 select: "name email avatar"
@@ -44,9 +82,19 @@ router.get("/", protect, async (req, res) => {
             .populate("departmentId", "name")
             .sort({ specialization: 1 });
 
+        if (hasPagination) {
+            doctorQuery.skip((page - 1) * limit).limit(limit);
+        }
+
+        const doctors = await doctorQuery;
+
         return res.status(200).json({
             success: true,
-            count: doctors.length,
+            count: total,
+            total,
+            currentPage: hasPagination ? page : 1,
+            limit: hasPagination ? limit : total,
+            totalPages: hasPagination ? Math.ceil(total / limit) : 1,
             data: doctors
         });
 
@@ -82,7 +130,7 @@ router.get("/me", protect, authorizeRoles("doctor"), async (req, res) => {
             success: true,
             data: doctor
         });
-    } catch (error) {
+    } catch {
         res.status(500).json({
             success: false,
             message: "Unable to fetch doctor profile"
@@ -98,6 +146,34 @@ router.patch("/me", protect, authorizeRoles("doctor"), async (req, res) => {
     try {
         const { isAvailable, consultationDuration, specialization, qualification, experience } = req.body;
 
+        if (isAvailable !== undefined && typeof isAvailable !== "boolean") {
+            return res.status(400).json({
+                success: false,
+                message: "isAvailable must be a boolean"
+            });
+        }
+
+        if (
+            consultationDuration !== undefined &&
+            (!Number.isFinite(Number(consultationDuration)) ||
+                Number(consultationDuration) < 1)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Consultation duration must be at least 1 minute"
+            });
+        }
+
+        if (
+            experience !== undefined &&
+            (!Number.isFinite(Number(experience)) || Number(experience) < 0)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Experience must be a valid non-negative number"
+            });
+        }
+
         const doctor = await Doctor.findOne({ userId: req.user._id });
         if (!doctor) {
             return res.status(404).json({
@@ -107,10 +183,28 @@ router.patch("/me", protect, authorizeRoles("doctor"), async (req, res) => {
         }
 
         if (isAvailable !== undefined) doctor.isAvailable = isAvailable;
-        if (consultationDuration) doctor.consultationDuration = consultationDuration;
-        if (specialization) doctor.specialization = specialization;
-        if (qualification) doctor.qualification = qualification;
-        if (experience !== undefined) doctor.experience = experience;
+        if (consultationDuration !== undefined) {
+            doctor.consultationDuration = Number(consultationDuration);
+        }
+        if (specialization !== undefined) {
+            if (typeof specialization !== "string" || !specialization.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Specialization must be a non-empty string"
+                });
+            }
+            doctor.specialization = specialization.trim();
+        }
+        if (qualification !== undefined) {
+            if (typeof qualification !== "string" || !qualification.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Qualification must be a non-empty string"
+                });
+            }
+            doctor.qualification = qualification.trim();
+        }
+        if (experience !== undefined) doctor.experience = Number(experience);
 
         await doctor.save();
 
@@ -119,7 +213,7 @@ router.patch("/me", protect, authorizeRoles("doctor"), async (req, res) => {
             message: "Doctor profile updated",
             data: doctor
         });
-    } catch (error) {
+    } catch {
         res.status(500).json({
             success: false,
             message: "Unable to update doctor profile"
@@ -139,6 +233,18 @@ router.patch("/:id", protect, authorizeRoles("admin"), async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Invalid doctor ID"
+            });
+        }
+
+        if (
+            (specialization !== undefined &&
+                (typeof specialization !== "string" || !specialization.trim())) ||
+            (qualification !== undefined &&
+                (typeof qualification !== "string" || !qualification.trim()))
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Specialization and qualification must be non-empty strings"
             });
         }
 

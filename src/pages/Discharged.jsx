@@ -68,7 +68,7 @@ function printSummary(p) {
 
         <div class="footer">
           <span>Patient ID: #${p.id}</span>
-          <span>Printed: ${new Date().toLocaleString()}</span>
+          <span>Printed: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</span>
         </div>
         <script>window.print();</script>
       </body>
@@ -116,6 +116,8 @@ export default function Discharged() {
   };
 
   useEffect(() => {
+    // Data loading updates state asynchronously after the request resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, []);
 

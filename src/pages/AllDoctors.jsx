@@ -10,6 +10,9 @@ export default function AllDoctors() {
     const [search, setSearch] = useState("");
     const [department, setDepartment] = useState("All");
     const [departmentList, setDepartmentList] = useState([]);
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalDoctors, setTotalDoctors] = useState(0);
 
     const [editingDoctor, setEditingDoctor] = useState(null);
     const [editForm, setEditForm] = useState({
@@ -26,8 +29,17 @@ export default function AllDoctors() {
                 setLoading(true);
                 setError("");
 
-                const response = await fetchDoctors();
+                const params = {
+                    page,
+                    limit: 9
+                };
+                if (search.trim()) params.search = search.trim();
+                if (department !== "All") params.departmentId = department;
+
+                const response = await fetchDoctors(params);
                 setDoctors(response.data || []);
+                setTotalDoctors(response.total ?? response.count ?? 0);
+                setTotalPages(response.totalPages || 1);
             } catch (err) {
                 console.error("Doctors loading error:", err);
                 setError("Unable to load doctors.");
@@ -36,6 +48,10 @@ export default function AllDoctors() {
             }
         };
 
+        loadDoctors();
+    }, [page, search, department]);
+
+    useEffect(() => {
         const loadDepartments = async () => {
             try {
                 const response = await fetchDepartments();
@@ -45,36 +61,10 @@ export default function AllDoctors() {
             }
         };
 
-        loadDoctors();
         loadDepartments();
     }, []);
 
-    const departments = [
-        "All",
-        ...new Set(
-            doctors.map((doctor) => doctor.departmentId?.name).filter(Boolean)
-        )
-    ];
-
-    const filteredDoctors = doctors.filter((doctor) => {
-        const name = doctor.userId?.name || "";
-        const email = doctor.userId?.email || "";
-        const specialization = doctor.specialization || "";
-        const departmentName = doctor.departmentId?.name || "";
-
-        const matchesSearch = [
-            name,
-            email,
-            specialization
-        ].some((value) =>
-            value.toLowerCase().includes(search.toLowerCase())
-        );
-
-        const matchesDepartment =
-            department === "All" || departmentName === department;
-
-        return matchesSearch && matchesDepartment;
-    });
+    const departments = ["All", ...departmentList.map((item) => item._id)];
 
     // Open Edit Modal
     const handleEdit = (doctor) => {
@@ -168,19 +158,27 @@ export default function AllDoctors() {
                 <input
                     type="text"
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(e) => {
+                        setSearch(e.target.value);
+                        setPage(1);
+                    }}
                     placeholder="Search by doctor name, email or specialization..."
                     className="flex-1 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                 />
 
                 <select
                     value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
+                    onChange={(e) => {
+                        setDepartment(e.target.value);
+                        setPage(1);
+                    }}
                     className="px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-white outline-none"
                 >
                     {departments.map((item) => (
                         <option key={item} value={item}>
-                            {item === "All" ? "All Departments" : item}
+                            {item === "All"
+                                ? "All Departments"
+                                : departmentList.find((entry) => entry._id === item)?.name}
                         </option>
                     ))}
                 </select>
@@ -192,7 +190,7 @@ export default function AllDoctors() {
             )}
 
             {/* Doctor Cards */}
-            {!error && filteredDoctors.length === 0 ? (
+            {!error && doctors.length === 0 ? (
                 <div className="bg-white dark:bg-slate-900 rounded-2xl p-10 text-center border border-slate-200 dark:border-slate-800">
                     <p className="text-slate-500">
                         No doctors found.
@@ -201,7 +199,7 @@ export default function AllDoctors() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
 
-                    {filteredDoctors.map((doctor) => (
+                    {doctors.map((doctor) => (
                         <div
                             key={doctor._id}
                             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow"
@@ -297,8 +295,31 @@ export default function AllDoctors() {
             )}
 
             <p className="text-xs text-slate-400 text-right">
-                Showing {filteredDoctors.length} of {doctors.length} doctors
+                Showing {doctors.length} of {totalDoctors} doctors
             </p>
+            {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3">
+                    <button
+                        type="button"
+                        disabled={page === 1}
+                        onClick={() => setPage((current) => current - 1)}
+                        className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40 dark:bg-slate-800 dark:text-white"
+                    >
+                        Previous
+                    </button>
+                    <span className="text-sm text-slate-500">
+                        Page {page} of {totalPages}
+                    </span>
+                    <button
+                        type="button"
+                        disabled={page === totalPages}
+                        onClick={() => setPage((current) => current + 1)}
+                        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+                    >
+                        Next
+                    </button>
+                </div>
+            )}
 
             {/* Step 5: Edit Doctor Modal */}
             {editingDoctor && (

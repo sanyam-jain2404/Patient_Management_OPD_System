@@ -56,7 +56,8 @@ function formatDate(date) {
   return parsedDate.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
-    year: "numeric"
+    year: "numeric",
+    timeZone: "Asia/Kolkata"
   });
 }
 

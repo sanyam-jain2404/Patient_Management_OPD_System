@@ -1,4 +1,5 @@
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const getHeaders = () => {
   const token = localStorage.getItem("token");
@@ -22,14 +23,30 @@ export const apiRequest = async (endpoint, method = "GET", data = null) => {
   }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+  const responseText = await response.text();
+  let result = null;
 
-  // Check for HTTP errors before parsing JSON
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Something went wrong");
+  if (responseText) {
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      result = null;
+    }
   }
 
-  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(
+      result?.message ||
+      result?.error ||
+      responseText ||
+      "Something went wrong"
+    );
+  }
+
+  if (result === null) {
+    throw new Error("The server returned an invalid response.");
+  }
+
   return result;
 };
 
@@ -109,13 +126,36 @@ export const fetchMyDoctorProfile = async () => {
   return await apiRequest("/doctors/me");
 };
 
+export const fetchMyDoctorAvailability = async () => {
+  return await apiRequest("/doctors/me/availability");
+};
+
+export const updateMyDoctorAvailability = async (availabilityData) => {
+  return await apiRequest(
+    "/doctors/me/availability",
+    "PUT",
+    availabilityData
+  );
+};
+
+export const fetchSystemSettings = async () => {
+  return await apiRequest("/settings");
+};
+
+export const updateSystemSettings = async (settings) => {
+  return await apiRequest("/settings", "PUT", settings);
+};
+
 // Consultation services
 export const recordConsultation = async (consultationData) => {
   return await apiRequest("/consultations", "POST", consultationData);
 };
 
-export const fetchPatientTreatmentHistory = async (patientId) => {
-  return await apiRequest(`/consultations/patient/${patientId}`);
+export const fetchPatientTreatmentHistory = async (patientId, params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  return await apiRequest(
+    `/consultations/patient/${patientId}${query ? `?${query}` : ""}`
+  );
 };
 
 // Follow-up services
@@ -124,8 +164,9 @@ export const fetchMyFollowUps = async () => {
 };
 // Patient services
 
-export const fetchApiPatients = async () => {
-  return await apiRequest("/patients");
+export const fetchApiPatients = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  return await apiRequest(`/patients${query ? `?${query}` : ""}`);
 };
 
 export const fetchDoctorPatients = async () => {

@@ -24,7 +24,7 @@ router.get(
                 count: doctors.length,
                 data: doctors
             });
-        } catch (error) {
+        } catch {
             res.status(500).json({
                 success: false,
                 message: "Unable to fetch pending doctors"
@@ -82,7 +82,7 @@ router.patch(
                     isVerified: doctor.isVerified
                 }
             });
-        } catch (error) {
+        } catch {
             res.status(500).json({
                 success: false,
                 message: "Unable to verify doctor"

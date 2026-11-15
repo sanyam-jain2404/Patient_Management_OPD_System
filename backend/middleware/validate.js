@@ -67,7 +67,7 @@ export const validate = (rules) => {
 
         // Sanitize string fields
         for (const key of Object.keys(body)) {
-            if (typeof body[key] === "string") {
+            if (typeof body[key] === "string" && key !== "password") {
                 body[key] = sanitizeString(body[key]);
             }
         }

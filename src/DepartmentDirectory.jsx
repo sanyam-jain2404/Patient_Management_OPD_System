@@ -69,7 +69,7 @@ export default function DepartmentDirectory() {
         ]);
         setDepartments(departmentResponse.data || []);
         setDoctors(doctorResponse.data || []);
-      } catch (err) {
+      } catch {
         setError("Unable to load the department directory. Please check your connection and try again.");
       } finally {
         setLoading(false);
