@@ -1,23 +1,12 @@
 import Doctor from "../models/Doctor.js";
 import User from "../models/User.js";
 import mongoose from "mongoose";
+import { isValidDate, isValidTime } from "../utils/dateUtils.js";
+import { ok, badRequest, notFound, serverError } from "../utils/respond.js";
 
-const isValidTime = (value) => typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
-const isValidDate = (value) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`));
-
-/**
- * GET /api/doctors
- * Fetch all verified doctors.
- */
 export const getAllDoctors = async (req, res) => {
     try {
-        const {
-            departmentId,
-            specialization,
-            search,
-            page: pageParam,
-            limit: limitParam
-        } = req.query;
+        const { departmentId, specialization, search, page: pageParam, limit: limitParam } = req.query;
         const hasPagination = pageParam !== undefined || limitParam !== undefined;
         const page = pageParam === undefined ? 1 : Number.parseInt(pageParam, 10);
         const limit = limitParam === undefined ? 10 : Number.parseInt(limitParam, 10);
@@ -26,17 +15,10 @@ export const getAllDoctors = async (req, res) => {
             (hasPagination && (!Number.isInteger(page) || page < 1)) ||
             (hasPagination && (!Number.isInteger(limit) || limit < 1 || limit > 100))
         ) {
-            return res.status(400).json({
-                success: false,
-                message: "Page must be at least 1 and limit must be between 1 and 100"
-            });
+            return badRequest(res, "Page must be at least 1 and limit must be between 1 and 100");
         }
 
-        // Find verified doctor users first
-        const verifiedUserQuery = {
-            role: "doctor",
-            isVerified: true
-        };
+        const verifiedUserQuery = { role: "doctor", isVerified: true };
         const verifiedUsers = await User.find(verifiedUserQuery).select("_id");
         const verifiedUserIds = verifiedUsers.map(user => user._id);
 
@@ -50,18 +32,10 @@ export const getAllDoctors = async (req, res) => {
             }).select("_id")).map(user => user._id)
             : [];
 
-        // Find doctor profiles belonging to verified users
-        let query = {
-            userId: { $in: verifiedUserIds }
-        };
+        let query = { userId: { $in: verifiedUserIds } };
 
-        if (departmentId) {
-            query.departmentId = departmentId;
-        }
-
-        if (specialization) {
-            query.specialization = specialization;
-        }
+        if (departmentId) query.departmentId = departmentId;
+        if (specialization) query.specialization = specialization;
 
         if (search?.trim()) {
             const searchPattern = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -73,10 +47,7 @@ export const getAllDoctors = async (req, res) => {
 
         const total = await Doctor.countDocuments(query);
         const doctorQuery = Doctor.find(query)
-            .populate({
-                path: "userId",
-                select: "name email avatar"
-            })
+            .populate({ path: "userId", select: "name email avatar" })
             .populate("departmentId", "name")
             .sort({ specialization: 1 });
 
@@ -86,8 +57,7 @@ export const getAllDoctors = async (req, res) => {
 
         const doctors = await doctorQuery;
 
-        return res.status(200).json({
-            success: true,
+        return ok(res, {
             count: total,
             total,
             currentPage: hasPagination ? page : 1,
@@ -98,219 +68,121 @@ export const getAllDoctors = async (req, res) => {
 
     } catch (error) {
         console.error("Fetch doctors error:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Unable to fetch doctors"
-        });
+        return serverError(res, "Unable to fetch doctors");
     }
 };
 
-/**
- * GET /api/doctors/me
- * Fetch current doctor profile.
- */
 export const getOwnProfile = async (req, res) => {
     try {
         const doctor = await Doctor.findOne({ userId: req.user._id })
             .populate({ path: "userId", select: "name email avatar" })
             .populate("departmentId", "name");
 
-        if (!doctor) {
-            return res.status(404).json({
-                success: false,
-                message: "Doctor profile not found"
-            });
-        }
+        if (!doctor) return notFound(res, "Doctor profile not found");
 
-        res.status(200).json({
-            success: true,
-            data: doctor
-        });
+        return ok(res, { data: doctor });
     } catch {
-        res.status(500).json({
-            success: false,
-            message: "Unable to fetch doctor profile"
-        });
+        return serverError(res, "Unable to fetch doctor profile");
     }
 };
 
-/**
- * PATCH /api/doctors/me
- * Update own doctor profile (availability, duration, etc.)
- */
 export const updateOwnProfile = async (req, res) => {
     try {
         const { isAvailable, consultationDuration, specialization, qualification, experience } = req.body;
 
         if (isAvailable !== undefined && typeof isAvailable !== "boolean") {
-            return res.status(400).json({
-                success: false,
-                message: "isAvailable must be a boolean"
-            });
+            return badRequest(res, "isAvailable must be a boolean");
         }
 
         if (
             consultationDuration !== undefined &&
-            (!Number.isFinite(Number(consultationDuration)) ||
-                Number(consultationDuration) < 1)
+            (!Number.isFinite(Number(consultationDuration)) || Number(consultationDuration) < 1)
         ) {
-            return res.status(400).json({
-                success: false,
-                message: "Consultation duration must be at least 1 minute"
-            });
+            return badRequest(res, "Consultation duration must be at least 1 minute");
         }
 
         if (
             experience !== undefined &&
             (!Number.isFinite(Number(experience)) || Number(experience) < 0)
         ) {
-            return res.status(400).json({
-                success: false,
-                message: "Experience must be a valid non-negative number"
-            });
+            return badRequest(res, "Experience must be a valid non-negative number");
         }
 
         const doctor = await Doctor.findOne({ userId: req.user._id });
-        if (!doctor) {
-            return res.status(404).json({
-                success: false,
-                message: "Doctor profile not found"
-            });
-        }
+        if (!doctor) return notFound(res, "Doctor profile not found");
 
         if (isAvailable !== undefined) doctor.isAvailable = isAvailable;
-        if (consultationDuration !== undefined) {
-            doctor.consultationDuration = Number(consultationDuration);
-        }
+        if (consultationDuration !== undefined) doctor.consultationDuration = Number(consultationDuration);
+
         if (specialization !== undefined) {
             if (typeof specialization !== "string" || !specialization.trim()) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Specialization must be a non-empty string"
-                });
+                return badRequest(res, "Specialization must be a non-empty string");
             }
             doctor.specialization = specialization.trim();
         }
+
         if (qualification !== undefined) {
             if (typeof qualification !== "string" || !qualification.trim()) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Qualification must be a non-empty string"
-                });
+                return badRequest(res, "Qualification must be a non-empty string");
             }
             doctor.qualification = qualification.trim();
         }
+
         if (experience !== undefined) doctor.experience = Number(experience);
 
         await doctor.save();
 
-        res.status(200).json({
-            success: true,
-            message: "Doctor profile updated",
-            data: doctor
-        });
+        return ok(res, { message: "Doctor profile updated", data: doctor });
     } catch {
-        res.status(500).json({
-            success: false,
-            message: "Unable to update doctor profile"
-        });
+        return serverError(res, "Unable to update doctor profile");
     }
 };
 
-/**
- * PATCH /api/doctors/:id
- * Admin updates a doctor's profile.
- */
 export const updateDoctorByAdmin = async (req, res) => {
     try {
         const { specialization, qualification, experience, departmentId } = req.body;
 
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid doctor ID"
-            });
+            return badRequest(res, "Invalid doctor ID");
         }
 
         if (
-            (specialization !== undefined &&
-                (typeof specialization !== "string" || !specialization.trim())) ||
-            (qualification !== undefined &&
-                (typeof qualification !== "string" || !qualification.trim()))
+            (specialization !== undefined && (typeof specialization !== "string" || !specialization.trim())) ||
+            (qualification !== undefined && (typeof qualification !== "string" || !qualification.trim()))
         ) {
-            return res.status(400).json({
-                success: false,
-                message: "Specialization and qualification must be non-empty strings"
-            });
+            return badRequest(res, "Specialization and qualification must be non-empty strings");
         }
 
         const doctor = await Doctor.findById(req.params.id);
+        if (!doctor) return notFound(res, "Doctor not found");
 
-        if (!doctor) {
-            return res.status(404).json({
-                success: false,
-                message: "Doctor not found"
-            });
-        }
-
-        // Validate experience
         if (
             experience !== undefined &&
             (!Number.isFinite(Number(experience)) || Number(experience) < 0)
         ) {
-            return res.status(400).json({
-                success: false,
-                message: "Experience must be a valid non-negative number"
-            });
+            return badRequest(res, "Experience must be a valid non-negative number");
         }
 
-        // Update Doctor collection
-        if (specialization !== undefined) {
-            doctor.specialization = specialization.trim();
-        }
-
-        if (qualification !== undefined) {
-            doctor.qualification = qualification.trim();
-        }
-
-        if (experience !== undefined) {
-            doctor.experience = Number(experience);
-        }
+        if (specialization !== undefined) doctor.specialization = specialization.trim();
+        if (qualification !== undefined) doctor.qualification = qualification.trim();
+        if (experience !== undefined) doctor.experience = Number(experience);
 
         if (departmentId !== undefined) {
             if (!mongoose.Types.ObjectId.isValid(departmentId)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid department ID"
-                });
+                return badRequest(res, "Invalid department ID");
             }
-
             doctor.departmentId = departmentId;
         }
 
         await doctor.save();
 
-        // Keep User collection synchronized
         const user = await User.findById(doctor.userId);
 
         if (user) {
-            if (specialization !== undefined) {
-                user.specialization = doctor.specialization;
-            }
-
-            if (qualification !== undefined) {
-                user.qualification = doctor.qualification;
-            }
-
-            if (experience !== undefined) {
-                user.experience = doctor.experience;
-            }
-
-            if (departmentId !== undefined) {
-                user.departmentId = doctor.departmentId;
-            }
-
+            if (specialization !== undefined) user.specialization = doctor.specialization;
+            if (qualification !== undefined) user.qualification = doctor.qualification;
+            if (experience !== undefined) user.experience = doctor.experience;
+            if (departmentId !== undefined) user.departmentId = doctor.departmentId;
             await user.save();
         }
 
@@ -318,33 +190,22 @@ export const updateDoctorByAdmin = async (req, res) => {
             .populate("userId", "name email")
             .populate("departmentId", "name");
 
-        return res.status(200).json({
-            success: true,
-            message: "Doctor details updated successfully",
-            data: updatedDoctor
-        });
+        return ok(res, { message: "Doctor details updated successfully", data: updatedDoctor });
 
     } catch (error) {
         console.error("Update doctor error:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Unable to update doctor details"
-        });
+        return serverError(res, "Unable to update doctor details");
     }
 };
 
-/**
- * GET /api/doctors/me/availability
- * Doctor views their weekly schedule and date-specific exceptions.
- */
 export const getOwnAvailability = async (req, res) => {
     try {
         const doctor = await Doctor.findOne({ userId: req.user._id })
             .select("isAvailable weeklySchedule availabilityExceptions");
-        if (!doctor) return res.status(404).json({ success: false, message: "Doctor profile not found" });
-        return res.status(200).json({
-            success: true,
+
+        if (!doctor) return notFound(res, "Doctor profile not found");
+
+        return ok(res, {
             data: {
                 isAvailable: doctor.isAvailable,
                 weeklySchedule: doctor.weeklySchedule || [],
@@ -353,42 +214,42 @@ export const getOwnAvailability = async (req, res) => {
         });
     } catch (error) {
         console.error("Get doctor availability error:", error.message);
-        return res.status(500).json({ success: false, message: "Unable to fetch doctor availability" });
+        return serverError(res, "Unable to fetch doctor availability");
     }
 };
 
-/**
- * PUT /api/doctors/me/availability
- * Replace the current doctor's weekly schedule and date exceptions.
- */
 export const updateOwnAvailability = async (req, res) => {
     try {
         const { weeklySchedule, availabilityExceptions } = req.body;
+
         if (weeklySchedule !== undefined && !Array.isArray(weeklySchedule)) {
-            return res.status(400).json({ success: false, message: "weeklySchedule must be an array" });
+            return badRequest(res, "weeklySchedule must be an array");
         }
         if (availabilityExceptions !== undefined && !Array.isArray(availabilityExceptions)) {
-            return res.status(400).json({ success: false, message: "availabilityExceptions must be an array" });
+            return badRequest(res, "availabilityExceptions must be an array");
         }
 
         const schedule = weeklySchedule ?? [];
         const exceptions = availabilityExceptions ?? [];
         const seenDays = new Set();
+
         for (const day of schedule) {
             if (!Number.isInteger(day.dayOfWeek) || day.dayOfWeek < 0 || day.dayOfWeek > 6 || seenDays.has(day.dayOfWeek)) {
-                return res.status(400).json({ success: false, message: "Each dayOfWeek must be unique and between 0 (Sunday) and 6 (Saturday)" });
+                return badRequest(res, "Each dayOfWeek must be unique and between 0 (Sunday) and 6 (Saturday)");
             }
             seenDays.add(day.dayOfWeek);
+
             if (typeof day.isWorking !== "boolean") {
-                return res.status(400).json({ success: false, message: "isWorking must be a boolean" });
+                return badRequest(res, "isWorking must be a boolean");
             }
+
             if (day.isWorking) {
                 if (!isValidTime(day.startTime) || !isValidTime(day.endTime) || day.startTime >= day.endTime) {
-                    return res.status(400).json({ success: false, message: "Working days need valid startTime and endTime (HH:MM), with start before end" });
+                    return badRequest(res, "Working days need valid startTime and endTime (HH:MM), with start before end");
                 }
                 const hasBreak = day.breakStart != null || day.breakEnd != null;
                 if (hasBreak && (!isValidTime(day.breakStart) || !isValidTime(day.breakEnd) || day.breakStart >= day.breakEnd || day.breakStart < day.startTime || day.breakEnd > day.endTime)) {
-                    return res.status(400).json({ success: false, message: "Break must be valid and fall within working hours" });
+                    return badRequest(res, "Break must be valid and fall within working hours");
                 }
             }
         }
@@ -396,22 +257,22 @@ export const updateOwnAvailability = async (req, res) => {
         const seenDates = new Set();
         for (const exception of exceptions) {
             if (!isValidDate(exception.date) || seenDates.has(exception.date) || typeof exception.isAvailable !== "boolean") {
-                return res.status(400).json({ success: false, message: "Each exception needs a unique YYYY-MM-DD date and boolean isAvailable" });
+                return badRequest(res, "Each exception needs a unique YYYY-MM-DD date and boolean isAvailable");
             }
             seenDates.add(exception.date);
             if (exception.isAvailable && (!isValidTime(exception.startTime) || !isValidTime(exception.endTime) || exception.startTime >= exception.endTime)) {
-                return res.status(400).json({ success: false, message: "Available exceptions need valid startTime and endTime" });
+                return badRequest(res, "Available exceptions need valid startTime and endTime");
             }
         }
 
         const doctor = await Doctor.findOne({ userId: req.user._id });
-        if (!doctor) return res.status(404).json({ success: false, message: "Doctor profile not found" });
+        if (!doctor) return notFound(res, "Doctor profile not found");
+
         if (weeklySchedule !== undefined) doctor.weeklySchedule = schedule;
         if (availabilityExceptions !== undefined) doctor.availabilityExceptions = exceptions;
         await doctor.save();
 
-        return res.status(200).json({
-            success: true,
+        return ok(res, {
             message: "Doctor availability updated successfully",
             data: {
                 weeklySchedule: doctor.weeklySchedule,
@@ -420,6 +281,6 @@ export const updateOwnAvailability = async (req, res) => {
         });
     } catch (error) {
         console.error("Update doctor availability error:", error.message);
-        return res.status(500).json({ success: false, message: "Unable to update doctor availability" });
+        return serverError(res, "Unable to update doctor availability");
     }
 };
