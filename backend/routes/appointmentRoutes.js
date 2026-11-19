@@ -8,6 +8,7 @@ import Doctor from "../models/Doctor.js";
 import Patient from "../models/Patient.js";
 import FollowUp from "../models/FollowUp.js";
 import Consultation from "../models/Consultation.js";
+import SystemSetting from "../models/SystemSetting.js";
 
 import { allocateAppointment } from "../services/allocationService.js";
 import { recalculateDoctorQueue } from "../services/queueService.js";
@@ -234,6 +235,22 @@ router.post("/", protect, async (req, res) => {
                     message: "An appointment has already been booked for this follow-up."
                 });
             }
+        }
+
+        const settings = await SystemSetting.findOne({
+            key: "default"
+        }).lean();
+        const dailyCapacity = Number(settings?.capacity ?? 50);
+        const bookedToday = await Appointment.countDocuments({
+            appointmentDate: date,
+            status: { $ne: "Cancelled" }
+        });
+
+        if (bookedToday >= dailyCapacity) {
+            return res.status(409).json({
+                success: false,
+                message: `Daily patient capacity of ${dailyCapacity} has been reached.`
+            });
         }
 
         // Smart doctor allocation

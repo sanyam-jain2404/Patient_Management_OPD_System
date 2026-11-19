@@ -15,6 +15,7 @@ import followUpRoutes from "./routes/followUpRoutes.js";
 import settingRoutes from "./routes/settingRoutes.js";
 import helmet from "helmet";
 import { apiLimiter, authLimiter } from "./middleware/rateLimiter.js";
+import { cancelAppointmentsAtOpdClose } from "./services/appointmentClosureService.js";
 
 dotenv.config();
 const app = express();
@@ -57,6 +58,20 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
     try {
         await connectDB();
+
+        const runAppointmentClosure = async () => {
+            try {
+                await cancelAppointmentsAtOpdClose();
+            } catch (error) {
+                console.error(
+                    "Automatic appointment cancellation error:",
+                    error.message
+                );
+            }
+        };
+
+        await runAppointmentClosure();
+        setInterval(runAppointmentClosure, 60 * 1000);
 
         app.listen(PORT, () => {
             console.log(`Server running on http://localhost:${PORT}`);
